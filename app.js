@@ -1,65 +1,53 @@
 (function () {
-  const storageKey = "financialTrackerData";
-  const defaultCategories = [
+  const STORAGE_KEY = "financialTrackerTransactions";
+  const SETTINGS_KEY = "financialTrackerSettings";
+
+  const DEFAULT_CATEGORIES = [
     "Mirovina",
     "Plaća",
-    "Režije",
     "Hrana",
-    "Lijekovi",
-    "Zdravlje",
-    "Prijevoz",
+    "Režije",
     "Gorivo",
+    "Lijekovi",
+    "Prijevoz",
     "Telekom",
     "Darovi",
     "Usluge",
-    "Hobi",
-    "Štednja",
-    "Ostali troškovi",
-    "Ostali prihodi",
   ];
 
-  const receiptPreferenceKey = "financialTrackerReceiptSettings";
-
-  const vendorCategoryHints = [
+  const VENDOR_HINTS = [
     { keyword: "konzum", title: "Konzum", category: "Hrana", type: "expense" },
     { keyword: "lidl", title: "Lidl", category: "Hrana", type: "expense" },
     { keyword: "spar", title: "SPAR", category: "Hrana", type: "expense" },
     { keyword: "plodine", title: "Plodine", category: "Hrana", type: "expense" },
-    { keyword: "interspar", title: "Interspar", category: "Hrana", type: "expense" },
     { keyword: "ina", title: "INA", category: "Gorivo", type: "expense" },
     { keyword: "tifon", title: "Tifon", category: "Gorivo", type: "expense" },
     { keyword: "petrol", title: "Petrol", category: "Gorivo", type: "expense" },
     { keyword: "hep", title: "HEP", category: "Režije", type: "expense" },
-    { keyword: "gradska toplana", title: "Gradska toplana", category: "Režije", type: "expense" },
-    { keyword: "a1", title: "A1", category: "Telekom", type: "expense" },
-    { keyword: "ht", title: "Hrvatski Telekom", category: "Telekom", type: "expense" },
+    { keyword: "telekom", title: "Hrvatski Telekom", category: "Telekom", type: "expense" },
     { keyword: "telemach", title: "Telemach", category: "Telekom", type: "expense" },
     { keyword: "mirovina", title: "Mirovina", category: "Mirovina", type: "income" },
     { keyword: "plaća", title: "Plaća", category: "Plaća", type: "income" },
-    { keyword: "isplata", title: "Isplata", category: "Plaća", type: "income" },
     { keyword: "uplata", title: "Uplata", category: "Ostali prihodi", type: "income" },
-    { keyword: "uplatnica", title: "Uplatnica", category: "Režije", type: "expense" },
-    { keyword: "lijek", title: "Ljekarna", category: "Lijekovi", type: "expense" },
+    { keyword: "isplata", title: "Isplata", category: "Plaća", type: "income" },
     { keyword: "ljekarna", title: "Ljekarna", category: "Lijekovi", type: "expense" },
     { keyword: "restoran", title: "Restoran", category: "Hrana", type: "expense" },
-    { keyword: "caffe", title: "Caffe", category: "Hrana", type: "expense" },
-    { keyword: "bar", title: "Bar", category: "Hrana", type: "expense" },
+    { keyword: "račun", title: "Račun", category: "Režije", type: "expense" },
   ];
 
-  const incomeKeywords = [
+  const INCOME_KEYWORDS = [
     "uplata",
     "uplaćeno",
     "isplata",
-    "primljeno",
     "mirovina",
     "plaća",
+    "primljeno",
+    "u korist",
     "credit",
     "cr",
-    "u korist",
-    "priljev",
   ];
 
-  const expenseKeywords = [
+  const EXPENSE_KEYWORDS = [
     "račun",
     "fiskalni",
     "ukupno",
@@ -75,1006 +63,669 @@
     minimumFractionDigits: 2,
   });
 
+  const viewDetails = {
+    home: "Sažeci i pregled potrošnje za odabrani mjesec.",
+    manual: "Ručni unos Prihoda ili Troška.",
+    camera: "Slikajte račun, provjerite podatke i spremite.",
+    history: "Pregled i brisanje stavki za mjesec.",
+    settings: "Postavite privatnost i popis kategorija.",
+  };
+
   const elements = {
+    sidebar: document.querySelector(".sidebar"),
+    menuToggle: document.getElementById("menu-toggle"),
+    menuClose: document.getElementById("menu-close"),
+    navButtons: document.querySelectorAll(".nav-button"),
+    views: document.querySelectorAll(".view"),
+    viewTitle: document.getElementById("view-title"),
+    viewDescription: document.getElementById("view-description"),
     monthSelect: document.getElementById("month-select"),
     incomeTotal: document.getElementById("income-total"),
     expenseTotal: document.getElementById("expense-total"),
     balanceTotal: document.getElementById("balance-total"),
-    form: document.getElementById("transaction-form"),
-    feedback: document.getElementById("form-feedback"),
     tableBody: document.getElementById("transaction-body"),
-    categoryList: document.getElementById("category-options"),
     confirmDialog: document.getElementById("confirm-dialog"),
+    categoryList: document.getElementById("category-options"),
+    manualForm: document.getElementById("transaction-form"),
+    manualType: document.getElementById("type"),
+    manualName: document.getElementById("name"),
+    manualCategory: document.getElementById("category"),
+    manualAmount: document.getElementById("amount"),
+    manualDate: document.getElementById("date"),
+    manualNote: document.getElementById("note"),
+    manualFeedback: document.getElementById("form-feedback"),
     captureButton: document.getElementById("capture-button"),
     captureInput: document.getElementById("capture-input"),
-    discardImages: document.getElementById("discard-images"),
-    receiptSection: document.getElementById("receipt-review"),
-    receiptImage: document.getElementById("receipt-image"),
-    receiptSummary: document.getElementById("receipt-summary"),
-    receiptWarning: document.getElementById("receipt-warning"),
+    captureBlock: document.getElementById("capture-block"),
     receiptForm: document.getElementById("receipt-form"),
+    receiptImage: document.getElementById("receipt-image"),
+    receiptRetake: document.getElementById("receipt-retake"),
+    receiptWarning: document.getElementById("receipt-warning"),
+    receiptFeedback: document.getElementById("receipt-feedback"),
     receiptType: document.getElementById("receipt-type"),
     receiptName: document.getElementById("receipt-name"),
-    receiptCategory: document.getElementById("receipt-category"),
     receiptAmount: document.getElementById("receipt-amount"),
     receiptDate: document.getElementById("receipt-date"),
+    receiptCategory: document.getElementById("receipt-category"),
     receiptNote: document.getElementById("receipt-note"),
-    receiptEdit: document.getElementById("receipt-edit"),
-    receiptRetake: document.getElementById("receipt-retake"),
-    receiptFeedback: document.getElementById("receipt-feedback"),
+    discardImages: document.getElementById("discard-images"),
+    settingsForm: document.getElementById("settings-form"),
+    settingsDiscardImages: document.getElementById("settings-discard-images"),
+    settingsCategories: document.getElementById("settings-categories"),
+    settingsFeedback: document.getElementById("settings-feedback"),
   };
 
-  let categoryChart;
-  let trendChart;
+  let pieChart;
   let currentDeleteId = null;
 
-  const stateMachine = {
-    state: "IDLE",
-    transitions: {
-      IDLE: {
-        FILL_FORM: "FORM_EDITING",
-        CLICK_DELETE: "DELETING",
-        CHANGE_MONTH: "IDLE",
-        CLICK_CAPTURE: "CAPTURE",
-      },
-      FORM_EDITING: {
-        SUBMIT_FORM: "SUBMITTING",
-        CANCEL: "IDLE",
-      },
-      CAPTURE: {
-        PHOTO_TAKEN: "OCR_PROCESSING",
-        CANCEL: "IDLE",
-      },
-      OCR_PROCESSING: {
-        OCR_OK: "REVIEW",
-        OCR_FAIL: "CAPTURE",
-      },
-      REVIEW: {
-        EDIT_FIELDS: "REVIEW",
-        RETAKE: "CAPTURE",
-        CANCEL: "IDLE",
-        CONFIRM_SAVE: "SUBMITTING",
-      },
-      SUBMITTING: {
-        API_OK: "IDLE",
-        API_FAIL: "ERROR",
-      },
-      DELETING: {
-        CONFIRM_DELETE: "SUBMITTING",
-        CANCEL: "IDLE",
-      },
-      ERROR: {
-        RETRY: "SUBMITTING",
-        CANCEL: "IDLE",
-      },
+  const state = {
+    activeView: "home",
+    month: "",
+    transactions: [],
+    form: {
+      type: "",
+      title: "",
+      category: "",
+      amount: "",
+      date: "",
+      note: "",
     },
-    transition(event) {
-      const next = this.transitions[this.state]?.[event];
-      if (!next) {
-        return;
-      }
-      this.state = next;
+    ocrResult: {
+      title: "",
+      amount: "",
+      date: "",
+      category: "",
+      type: "expense",
+      note: "račun skeniran",
+      confidence: 0,
     },
-  };
-
-  const receiptState = {
-    file: null,
-    data: null,
-    editing: false,
-    confidence: 0,
-    discardImages: true,
+    warnings: {
+      amountUncertain: false,
+      titleUncertain: false,
+    },
+    settings: {
+      discardImages: true,
+      categories: [...DEFAULT_CATEGORIES],
+    },
   };
 
   function loadTransactions() {
     try {
-      const saved = localStorage.getItem(storageKey);
-      return saved ? JSON.parse(saved) : [];
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
     } catch (error) {
-      console.error("Ne mogu učitati podatke", error);
+      console.warn("Ne mogu učitati transakcije", error);
       return [];
     }
   }
 
-  function saveTransactions(data) {
-    localStorage.setItem(storageKey, JSON.stringify(data));
+  function saveTransactions(transactions) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
   }
 
-  function loadReceiptPreferences() {
+  function loadSettings() {
     try {
-      const stored = localStorage.getItem(receiptPreferenceKey);
+      const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) {
-        return { discardImages: true };
+        return { discardImages: true, categories: [...DEFAULT_CATEGORIES] };
       }
       const parsed = JSON.parse(stored);
-      return { discardImages: parsed.discardImages !== false };
-    } catch (error) {
-      console.warn("Ne mogu učitati postavke skeniranja", error);
-      return { discardImages: true };
-    }
-  }
-
-  function saveReceiptPreferences(preferences) {
-    try {
-      localStorage.setItem(
-        receiptPreferenceKey,
-        JSON.stringify({ discardImages: preferences.discardImages })
-      );
-    } catch (error) {
-      console.warn("Ne mogu spremiti postavke skeniranja", error);
-    }
-  }
-
-  function formatCurrency(amount) {
-    return formatter.format(amount);
-  }
-
-  function toMonthValue(dateString) {
-    return dateString.slice(0, 7);
-  }
-
-  function populateCategories() {
-    const uniqueCategories = new Set(defaultCategories);
-    loadTransactions().forEach((item) => {
-      uniqueCategories.add(item.category);
-    });
-
-    elements.categoryList.innerHTML = "";
-    Array.from(uniqueCategories)
-      .sort((a, b) => a.localeCompare(b, "hr"))
-      .forEach((category) => {
-        if (!category) return;
-        const option = document.createElement("option");
-        option.value = category;
-        elements.categoryList.appendChild(option);
-      });
-  }
-
-  function resetFeedback() {
-    elements.feedback.textContent = "";
-    elements.feedback.className = "feedback";
-  }
-
-  function showFeedback(message, type) {
-    elements.feedback.textContent = message;
-    elements.feedback.className = `feedback ${type}`;
-  }
-
-  function resetReceiptFeedback() {
-    if (!elements.receiptFeedback) return;
-    elements.receiptFeedback.textContent = "";
-    elements.receiptFeedback.className = "feedback";
-  }
-
-  function showReceiptFeedback(message, type = "info") {
-    if (!elements.receiptFeedback) return;
-    elements.receiptFeedback.textContent = message;
-    elements.receiptFeedback.className = `feedback ${type}`;
-  }
-
-  function toggleReceiptFields(enable) {
-    if (!elements.receiptForm) return;
-    const fields = elements.receiptForm.querySelectorAll(
-      "input, select, textarea"
-    );
-    fields.forEach((field) => {
-      if (enable) {
-        field.disabled = false;
-        field.readOnly = false;
-      } else {
-        field.disabled = true;
-        field.readOnly = true;
-      }
-    });
-  }
-
-  function setReceiptEditing(enable) {
-    if (!elements.receiptForm || !elements.receiptEdit) return;
-    receiptState.editing = enable;
-    toggleReceiptFields(enable);
-    elements.receiptForm.classList.toggle("is-editing", enable);
-    elements.receiptEdit.textContent = enable ? "Završi uređivanje" : "Uredi";
-    if (enable) {
-      showReceiptFeedback("Polja su sada uređiva.", "info");
-      elements.receiptName?.focus();
-    }
-  }
-
-  function populateReceiptForm(data) {
-    if (!elements.receiptForm) return;
-    elements.receiptType.value = data.type || "expense";
-    elements.receiptName.value = data.name || "";
-    elements.receiptCategory.value = data.category || "";
-    elements.receiptAmount.value = data.amount ? Number(data.amount).toFixed(2) : "";
-    elements.receiptDate.value = data.date || "";
-    elements.receiptNote.value = data.note || "";
-  }
-
-  function renderReceiptSummary(data) {
-    if (!elements.receiptSummary) return;
-    const typeLabel =
-      data.type === "income"
-        ? "Prihod"
-        : data.type === "expense"
-        ? "Trošak"
-        : "";
-    const items = [
-      { label: "Tip", value: typeLabel },
-      { label: "Naziv", value: data.name },
-      { label: "Kategorija", value: data.category },
-      {
-        label: "Iznos",
-        value:
-          typeof data.amount === "number" && data.amount > 0
-            ? formatCurrency(data.amount)
-            : "—",
-      },
-      { label: "Datum", value: data.date },
-    ];
-
-    elements.receiptSummary.innerHTML = items
-      .filter((item) => item.value)
-      .map(
-        (item) =>
-          `<li><strong>${item.label}:</strong> <span>${item.value}</span></li>`
-      )
-      .join("");
-  }
-
-  function updateReceiptWarning(warnings = [], confidence = 1) {
-    if (!elements.receiptWarning) return;
-    const needsWarning = warnings.length || confidence < 0.7;
-    if (!needsWarning) {
-      elements.receiptWarning.hidden = true;
-      elements.receiptWarning.textContent = "";
-      return;
-    }
-
-    const messages = [...warnings];
-    if (confidence < 0.7) {
-      messages.push(
-        "Nismo sigurni u sva polja. Molimo provjerite iznos i tip prije spremanja."
-      );
-    }
-    elements.receiptWarning.textContent = messages.join(" ");
-    elements.receiptWarning.hidden = false;
-  }
-
-  function resetReceiptReview() {
-    if (!elements.receiptSection) return;
-    elements.receiptSection.hidden = true;
-    if (elements.receiptImage) {
-      elements.receiptImage.removeAttribute("src");
-    }
-    if (elements.receiptSummary) {
-      elements.receiptSummary.innerHTML = "";
-    }
-    if (elements.receiptForm) {
-      elements.receiptForm.reset();
-      elements.receiptForm.classList.remove("is-editing");
-    }
-    if (elements.receiptWarning) {
-      elements.receiptWarning.hidden = true;
-      elements.receiptWarning.textContent = "";
-    }
-    resetReceiptFeedback();
-    toggleReceiptFields(false);
-    receiptState.file = null;
-    receiptState.data = null;
-    receiptState.confidence = 0;
-    receiptState.editing = false;
-    if (elements.receiptEdit) {
-      elements.receiptEdit.textContent = "Uredi";
-    }
-    if (elements.captureInput) {
-      elements.captureInput.value = "";
-    }
-  }
-
-  function previewReceiptImage(file) {
-    if (!elements.receiptImage || !file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      elements.receiptImage.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function normaliseText(value) {
-    return value
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[\s_-]+/g, " ")
-      .toLowerCase();
-  }
-
-  function toTitleCase(value) {
-    return value
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ");
-  }
-
-  function extractAmountFromText(text) {
-    if (!text) return null;
-    const matches = text.match(/\d+[\.,]\d{2}/g);
-    if (!matches) return null;
-    const amounts = matches
-      .map((value) => Number(value.replace(",", ".")))
-      .filter((value) => Number.isFinite(value));
-    if (!amounts.length) return null;
-    return Math.max(...amounts);
-  }
-
-  function extractDateFromText(text) {
-    if (!text) return null;
-    const isoMatch = text.match(/(20\d{2})[-_.](\d{2})[-_.](\d{2})/);
-    if (isoMatch) {
-      const [, year, month, day] = isoMatch;
-      return `${year}-${month}-${day}`;
-    }
-    const hrMatch = text.match(/(\d{2})[.\-](\d{2})[.\-](20\d{2})/);
-    if (hrMatch) {
-      const [, day, month, year] = hrMatch;
-      return `${year}-${month}-${day}`;
-    }
-    return null;
-  }
-
-  function simulateOcr(file) {
-    const baseText = normaliseText(file.name || "");
-    const warnings = [];
-    let confidence = 0.85;
-
-    const vendor = vendorCategoryHints.find((hint) =>
-      baseText.includes(hint.keyword)
-    );
-
-    let type = vendor?.type || "expense";
-    let category = vendor?.category || (type === "income" ? "Ostali prihodi" : "Ostali troškovi");
-    let title = vendor?.title || toTitleCase(baseText.split(" ").slice(0, 3).join(" "));
-
-    if (!title || title.toLowerCase().startsWith("img")) {
-      title = type === "income" ? "Uplata" : "Račun";
-    }
-
-    const amount = extractAmountFromText(baseText);
-    if (!amount) {
-      warnings.push("Nismo sigurni u iznos. Molimo provjerite.");
-      confidence -= 0.2;
-    }
-
-    const keywordIncome = incomeKeywords.find((keyword) =>
-      baseText.includes(keyword)
-    );
-    if (keywordIncome) {
-      type = "income";
-      if (keywordIncome.includes("mirovina")) {
-        category = "Mirovina";
-        title = "Mirovina";
-      } else if (
-        keywordIncome.includes("plaća") ||
-        keywordIncome.includes("isplata")
-      ) {
-        category = "Plaća";
-        title = "Plaća";
-      } else {
-        category = "Ostali prihodi";
-      }
-    }
-
-    const keywordExpense = expenseKeywords.find((keyword) =>
-      baseText.includes(keyword)
-    );
-    if (!keywordIncome && keywordExpense && !vendor) {
-      type = "expense";
-      category = "Ostali troškovi";
-    }
-
-    const detectedDate = extractDateFromText(baseText);
-    let date = detectedDate;
-    if (!date && file.lastModified) {
-      date = new Date(file.lastModified).toISOString().slice(0, 10);
-      confidence -= 0.05;
-    }
-    if (!date) {
-      date = new Date().toISOString().slice(0, 10);
-      warnings.push("Datum nije prepoznat pa smo predložili današnji datum.");
-      confidence -= 0.1;
-    }
-
-    if (!vendor && !keywordIncome && !keywordExpense) {
-      confidence -= 0.15;
-      warnings.push("Molimo provjerite tip i kategoriju.");
-    }
-
-    confidence = Math.max(0.3, Math.min(1, confidence));
-
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          title,
-          type,
-          category,
-          amount: amount ? Number(amount.toFixed(2)) : null,
-          date,
-          note: "račun skeniran",
-          confidence,
-          warnings,
-        });
-      }, 800);
-    });
-  }
-
-  async function processReceiptFile(file) {
-    try {
-      const ocrResult = await simulateOcr(file);
-      receiptState.data = {
-        type: ocrResult.type,
-        name: ocrResult.title || "Račun",
-        category: ocrResult.category,
-        amount: ocrResult.amount,
-        date: ocrResult.date,
-        note: ocrResult.note,
+      return {
+        discardImages: parsed.discardImages !== false,
+        categories:
+          Array.isArray(parsed.categories) && parsed.categories.length
+            ? parsed.categories
+            : [...DEFAULT_CATEGORIES],
       };
-      receiptState.confidence = ocrResult.confidence;
-      renderReceiptSummary(receiptState.data);
-      populateReceiptForm(receiptState.data);
-      setReceiptEditing(false);
-      updateReceiptWarning(ocrResult.warnings, ocrResult.confidence);
-      const feedbackType =
-        ocrResult.warnings.length || ocrResult.confidence < 0.7
-          ? "warning"
-          : "info";
-      showReceiptFeedback(
-        "Provjerite podatke i po potrebi odaberite Uredi prije spremanja.",
-        feedbackType
-      );
-      stateMachine.transition("OCR_OK");
     } catch (error) {
-      console.error("OCR obrada nije uspjela", error);
-      showReceiptFeedback(
-        "Obrada nije uspjela. Fokusirajte kameru i pokušajte ponovno.",
-        "error"
-      );
-      updateReceiptWarning(
-        ["Obrada nije uspjela. Molimo pokušajte ponovno."],
-        0.4
-      );
-      stateMachine.transition("OCR_FAIL");
+      console.warn("Ne mogu učitati postavke", error);
+      return { discardImages: true, categories: [...DEFAULT_CATEGORIES] };
     }
   }
 
-  function handleCaptureClick() {
-    if (!elements.captureInput) return;
-    stateMachine.transition("CLICK_CAPTURE");
-    resetReceiptReview();
-    elements.captureInput.click();
+  function saveSettings(settings) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }
 
-  function handleCaptureChange(event) {
-    const file = event.target.files && event.target.files[0];
-    if (!file) {
-      stateMachine.transition("CANCEL");
-      return;
-    }
-    receiptState.file = file;
-    stateMachine.transition("PHOTO_TAKEN");
-    if (elements.receiptSection) {
-      elements.receiptSection.hidden = false;
-    }
-    previewReceiptImage(file);
-    showReceiptFeedback("Obrađujemo račun...", "info");
-    updateReceiptWarning([], 1);
-    processReceiptFile(file);
-  }
-
-  function handleReceiptEdit() {
-    if (!receiptState.data) {
-      showReceiptFeedback("Najprije uslikajte račun.", "info");
-      return;
-    }
-    if (receiptState.editing) {
-      setReceiptEditing(false);
-      populateReceiptForm(receiptState.data);
-      renderReceiptSummary(receiptState.data);
-      showReceiptFeedback(
-        "Promjene nisu spremljene dok ne pritisnete Spremi.",
-        "info"
-      );
-    } else {
-      stateMachine.transition("EDIT_FIELDS");
-      setReceiptEditing(true);
-    }
-  }
-
-  function handleReceiptRetake() {
-    stateMachine.transition("RETAKE");
-    resetReceiptReview();
-    if (elements.captureInput) {
-      elements.captureInput.click();
-    }
-  }
-
-  function handleReceiptSave(event) {
-    event.preventDefault();
-    resetReceiptFeedback();
-    if (!receiptState.data && !receiptState.editing) {
-      showReceiptFeedback("Najprije uslikajte račun.", "info");
-      return;
-    }
-
-    let dataToSave;
-    if (receiptState.editing) {
-      const { type, name, category, amount, date, note, errors } = getFormData(
-        elements.receiptForm
-      );
-      if (errors.length) {
-        showReceiptFeedback(errors.join(" "), "error");
-        stateMachine.transition("API_FAIL");
-        return;
-      }
-      dataToSave = { type, name, category, amount, date, note };
-      receiptState.data = dataToSave;
-      receiptState.confidence = 1;
-      renderReceiptSummary(receiptState.data);
-      setReceiptEditing(false);
-    } else {
-      const { sanitized, errors } = validateTransactionObject(
-        receiptState.data || {}
-      );
-      if (errors.length) {
-        showReceiptFeedback(errors.join(" "), "error");
-        stateMachine.transition("API_FAIL");
-        return;
-      }
-      dataToSave = sanitized;
-      receiptState.data = sanitized;
-      populateReceiptForm(receiptState.data);
-      renderReceiptSummary(receiptState.data);
-    }
-
-    stateMachine.transition("CONFIRM_SAVE");
-    try {
-      const allTransactions = loadTransactions();
-      const newTransaction = {
-        id: crypto.randomUUID(),
-        ...dataToSave,
-        amount: Number(dataToSave.amount),
-        createdAt: new Date().toISOString(),
-      };
-      allTransactions.push(newTransaction);
-      saveTransactions(allTransactions);
-      showReceiptFeedback("Račun je spremljen.", "success");
-      updateReceiptWarning([], 1);
-      stateMachine.transition("API_OK");
-      renderDashboard();
-      if (receiptState.discardImages) {
-        resetReceiptReview();
-      }
-    } catch (error) {
-      console.error("Spremanje računa nije uspjelo", error);
-      stateMachine.transition("API_FAIL");
-      showReceiptFeedback("Spremanje nije uspjelo. Pokušajte ponovno.", "error");
-    }
-  }
-
-  function validateTransactionObject(data) {
-    const sanitized = {
-      type: data.type || "",
-      name: (data.name || "").trim(),
-      category: (data.category || "").trim(),
-      amount: Number(data.amount),
-      date: data.date || "",
-      note: (data.note || "").trim(),
-    };
-
-    const errors = [];
-    if (!sanitized.type) errors.push("Odaberite tip transakcije.");
-    if (!sanitized.name) errors.push("Naziv je obavezan.");
-    if (!sanitized.category) errors.push("Kategorija je obavezna.");
-    if (!Number.isFinite(sanitized.amount) || sanitized.amount <= 0) {
-      errors.push("Iznos mora biti broj veći od 0 (npr. 25.00).");
-    }
-    if (!sanitized.date) errors.push("Datum je obavezan (format GGGG-MM-DD).");
-
-    return { sanitized, errors };
-  }
-
-  function getFormData(form) {
-    const formData = new FormData(form);
-    const { sanitized, errors } = validateTransactionObject({
-      type: formData.get("type"),
-      name: formData.get("name"),
-      category: formData.get("category"),
-      amount: formData.get("amount"),
-      date: formData.get("date"),
-      note: formData.get("note"),
+  function setActiveView(view) {
+    state.activeView = view;
+    elements.views.forEach((section) => {
+      const isActive = section.dataset.view === view;
+      section.hidden = !isActive;
     });
+    elements.navButtons.forEach((button) => {
+      const isActive = button.dataset.view === view;
+      button.classList.toggle("is-active", isActive);
+    });
+    elements.viewTitle.textContent =
+      view === "home"
+        ? "Početna"
+        : view === "manual"
+        ? "Nova stavka"
+        : view === "camera"
+        ? "Slikaj račun"
+        : view === "history"
+        ? "Povijest"
+        : "Postavke";
+    elements.viewDescription.textContent = viewDetails[view] ?? "";
 
-    return {
-      ...sanitized,
-      errors,
-    };
+    if (view === "history") {
+      renderTable();
+    }
+    if (view === "manual") {
+      prefillManualForm();
+    }
+    if (view === "camera") {
+      resetReceiptForm();
+    }
+    closeSidebar();
   }
 
-  function updateSummary(transactions) {
-    const incomeTotal = transactions
+  function closeSidebar() {
+    elements.sidebar.classList.remove("open");
+  }
+
+  function openSidebar() {
+    elements.sidebar.classList.add("open");
+  }
+
+  function formatAmount(value) {
+    const numeric = Number(value || 0);
+    return formatter.format(isNaN(numeric) ? 0 : numeric);
+  }
+
+  function currentMonthString() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function filterTransactionsByMonth(transactions, month) {
+    return transactions.filter((item) => item.date?.slice(0, 7) === month);
+  }
+
+  function updateSummary() {
+    const monthlyTransactions = filterTransactionsByMonth(state.transactions, state.month);
+    const income = monthlyTransactions
       .filter((item) => item.type === "income")
-      .reduce((sum, item) => sum + item.amount, 0);
-    const expenseTotal = transactions
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const expense = monthlyTransactions
       .filter((item) => item.type === "expense")
-      .reduce((sum, item) => sum + item.amount, 0);
-    const balance = incomeTotal - expenseTotal;
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const balance = income - expense;
 
-    elements.incomeTotal.textContent = formatCurrency(incomeTotal);
-    elements.expenseTotal.textContent = formatCurrency(expenseTotal);
-    elements.balanceTotal.textContent = formatCurrency(balance);
+    elements.incomeTotal.textContent = formatAmount(income);
+    elements.expenseTotal.textContent = formatAmount(expense);
+    elements.balanceTotal.textContent = formatAmount(balance);
+
+    updateChart(monthlyTransactions);
   }
 
-  function updateTable(transactions) {
-    elements.tableBody.innerHTML = "";
-    if (!transactions.length) {
-      const row = document.createElement("tr");
-      const cell = document.createElement("td");
-      cell.colSpan = 6;
-      cell.textContent = "Nema zapisa za odabrani mjesec.";
-      row.appendChild(cell);
-      elements.tableBody.appendChild(row);
-      return;
-    }
-
-    const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
-
-    sorted.forEach((item) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td data-label="Datum">${item.date}</td>
-        <td data-label="Tip">${item.type === "income" ? "Prihod" : "Trošak"}</td>
-        <td data-label="Naziv">${item.name}</td>
-        <td data-label="Kategorija">${item.category}</td>
-        <td data-label="Iznos" class="amount-value">${formatCurrency(item.amount)}</td>
-        <td data-label="Brisanje">
-          <button class="delete-button" data-id="${item.id}">Obriši</button>
-        </td>
-      `;
-      row.title = item.note ? `Bilješka: ${item.note}` : "";
-      elements.tableBody.appendChild(row);
-    });
-  }
-
-  function updateCategoryChart(transactions) {
-    const expenseTransactions = transactions.filter(
-      (item) => item.type === "expense"
-    );
-
-    const categoryTotals = expenseTransactions.reduce((acc, item) => {
-      acc[item.category] = (acc[item.category] || 0) + item.amount;
-      return acc;
-    }, {});
-
-    const labels = Object.keys(categoryTotals);
-    const data = Object.values(categoryTotals);
-
-    const colors = labels.map((_, index) => {
-      const hue = (index * 67) % 360;
-      return `hsl(${hue} 70% 55%)`;
-    });
+  function updateChart(transactions) {
+    const expenseByCategory = transactions
+      .filter((item) => item.type === "expense")
+      .reduce((acc, item) => {
+        const key = item.category || "Nepoznato";
+        acc[key] = (acc[key] || 0) + Number(item.amount || 0);
+        return acc;
+      }, {});
 
     const ctx = document.getElementById("category-chart");
+    const labels = Object.keys(expenseByCategory);
+    const data = Object.values(expenseByCategory);
 
-    if (categoryChart) {
-      categoryChart.data.labels = labels;
-      categoryChart.data.datasets[0].data = data;
-      categoryChart.data.datasets[0].backgroundColor = colors;
-      categoryChart.update();
+    if (pieChart) {
+      pieChart.data.labels = labels;
+      pieChart.data.datasets[0].data = data;
+      pieChart.update();
       return;
     }
 
-    categoryChart = new Chart(ctx, {
-      type: "doughnut",
+    pieChart = new Chart(ctx, {
+      type: "pie",
       data: {
         labels,
         datasets: [
           {
             data,
-            backgroundColor: colors,
-            borderColor: "#ffffff",
-            borderWidth: 2,
+            backgroundColor: [
+              "#175676",
+              "#4BA3C3",
+              "#8FC0A9",
+              "#F3DFA2",
+              "#F7A072",
+              "#9C89B8",
+              "#F2D0A9",
+            ],
           },
         ],
       },
       options: {
+        responsive: true,
         plugins: {
           legend: {
             position: "bottom",
-            labels: {
-              font: {
-                size: 14,
-              },
-            },
-          },
-          tooltip: {
-            callbacks: {
-              label(context) {
-                const value = context.raw || 0;
-                return `${context.label}: ${formatCurrency(value)}`;
-              },
-            },
           },
         },
       },
     });
   }
 
-  function updateTrendChart(allTransactions) {
-    const monthlyTotals = allTransactions.reduce((acc, item) => {
-      const month = toMonthValue(item.date);
-      if (!acc[month]) {
-        acc[month] = { income: 0, expense: 0 };
-      }
-      if (item.type === "income") {
-        acc[month].income += item.amount;
-      } else {
-        acc[month].expense += item.amount;
-      }
-      return acc;
-    }, {});
+  function renderTable() {
+    const monthly = filterTransactionsByMonth(state.transactions, state.month);
+    elements.tableBody.innerHTML = "";
 
-    const sortedMonths = Object.keys(monthlyTotals).sort((a, b) => a.localeCompare(b));
-    const labels = sortedMonths;
-    const incomeData = labels.map((label) => monthlyTotals[label].income);
-    const expenseData = labels.map((label) => monthlyTotals[label].expense);
-
-    const ctx = document.getElementById("trend-chart");
-
-    if (trendChart) {
-      trendChart.data.labels = labels;
-      trendChart.data.datasets[0].data = incomeData;
-      trendChart.data.datasets[1].data = expenseData;
-      trendChart.update();
+    if (!monthly.length) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 6;
+      cell.textContent = "Nema stavki za odabrani mjesec.";
+      row.appendChild(cell);
+      elements.tableBody.appendChild(row);
       return;
     }
 
-    trendChart = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "Prihodi",
-            data: incomeData,
-            borderColor: "#1a73e8",
-            backgroundColor: "rgba(26, 115, 232, 0.1)",
-            tension: 0.3,
-            fill: true,
-          },
-          {
-            label: "Troškovi",
-            data: expenseData,
-            borderColor: "#d32f2f",
-            backgroundColor: "rgba(211, 47, 47, 0.1)",
-            tension: 0.3,
-            fill: true,
-          },
-        ],
-      },
-      options: {
-        scales: {
-          y: {
-            ticks: {
-              callback(value) {
-                return formatCurrency(value);
-              },
-            },
-          },
-        },
-        plugins: {
-          tooltip: {
-            callbacks: {
-              label(context) {
-                const value = context.raw || 0;
-                return `${context.dataset.label}: ${formatCurrency(value)}`;
-              },
-            },
-          },
-          legend: {
-            labels: {
-              font: {
-                size: 14,
-              },
-            },
-          },
-        },
-      },
+    monthly
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .forEach((item) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${item.date}</td>
+          <td>${item.type === "income" ? "Prihod" : "Trošak"}</td>
+          <td>${item.title}</td>
+          <td>${item.category || "-"}</td>
+          <td class="amount-column">${formatAmount(item.amount)}</td>
+          <td><button class="danger-button delete-button" data-id="${item.id}">Obriši</button></td>
+        `;
+        elements.tableBody.appendChild(row);
+      });
+  }
+
+  function syncCategoryOptions() {
+    elements.categoryList.innerHTML = "";
+    state.settings.categories.forEach((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      elements.categoryList.appendChild(option);
     });
   }
 
-  function renderDashboard() {
-    const allTransactions = loadTransactions();
-    const selectedMonth = elements.monthSelect.value;
-
-    const filtered = allTransactions.filter(
-      (item) => toMonthValue(item.date) === selectedMonth
-    );
-
-    updateSummary(filtered);
-    updateTable(filtered);
-    updateCategoryChart(filtered);
-    updateTrendChart(allTransactions);
-    populateCategories();
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    resetFeedback();
-
-    stateMachine.transition("SUBMIT_FORM");
-    const { type, name, category, amount, date, note, errors } = getFormData(
-      elements.form
-    );
-
-    if (errors.length) {
-      stateMachine.transition("API_FAIL");
-      showFeedback(errors.join(" "), "error");
-      return;
-    }
-
-    try {
-      const allTransactions = loadTransactions();
-      const newTransaction = {
-        id: crypto.randomUUID(),
-        type,
-        name,
-        category,
-        amount,
-        date,
-        note,
-        createdAt: new Date().toISOString(),
-      };
-      allTransactions.push(newTransaction);
-      saveTransactions(allTransactions);
-      elements.form.reset();
-      setDefaultValues();
-      stateMachine.transition("API_OK");
-      showFeedback("Stavka je spremljena.", "success");
-      renderDashboard();
-    } catch (error) {
-      console.error("Spremanje nije uspjelo", error);
-      stateMachine.transition("API_FAIL");
-      showFeedback("Spremanje nije uspjelo. Pokušajte ponovno.", "error");
-    }
-  }
-
-  function setDefaultValues() {
+  function prefillManualForm() {
     const today = new Date().toISOString().slice(0, 10);
-    const dateInput = document.getElementById("date");
-    if (!dateInput.value) {
-      dateInput.value = today;
+    elements.manualType.value = state.form.type || "";
+    elements.manualName.value = state.form.title || "";
+    elements.manualCategory.value = state.form.category || "";
+    elements.manualAmount.value = state.form.amount || "";
+    elements.manualDate.value = state.form.date || today;
+    elements.manualNote.value = state.form.note || "";
+  }
+
+  function resetManualForm() {
+    state.form = {
+      type: "",
+      title: "",
+      category: "",
+      amount: "",
+      date: new Date().toISOString().slice(0, 10),
+      note: "",
+    };
+    elements.manualForm.reset();
+    prefillManualForm();
+    elements.manualFeedback.textContent = "";
+  }
+
+  function captureManualState() {
+    state.form = {
+      type: elements.manualType.value,
+      title: elements.manualName.value,
+      category: elements.manualCategory.value,
+      amount: elements.manualAmount.value,
+      date: elements.manualDate.value,
+      note: elements.manualNote.value,
+    };
+  }
+
+  function resetReceiptForm() {
+    elements.captureInput.value = "";
+    elements.captureBlock.hidden = false;
+    elements.receiptForm.hidden = true;
+    elements.receiptImage.src = "";
+    elements.receiptFeedback.textContent = "";
+    elements.receiptWarning.hidden = true;
+    state.ocrResult = {
+      title: "",
+      amount: "",
+      date: "",
+      category: "",
+      type: "expense",
+      note: "račun skeniran",
+      confidence: 0,
+    };
+    state.warnings = { amountUncertain: false, titleUncertain: false };
+    updateReceiptFields();
+  }
+
+  function updateReceiptFields() {
+    const today = new Date().toISOString().slice(0, 10);
+    elements.receiptType.value = state.ocrResult.type || "expense";
+    elements.receiptName.value = state.ocrResult.title || "";
+    elements.receiptAmount.value = state.ocrResult.amount || "";
+    elements.receiptDate.value = state.ocrResult.date || today;
+    elements.receiptCategory.value = state.ocrResult.category || "";
+    elements.receiptNote.value = state.ocrResult.note || "";
+
+    elements.receiptName.closest(".form-group").classList.toggle(
+      "is-uncertain",
+      state.warnings.titleUncertain
+    );
+    elements.receiptAmount.closest(".form-group").classList.toggle(
+      "is-uncertain",
+      state.warnings.amountUncertain
+    );
+
+    if (state.warnings.amountUncertain || state.warnings.titleUncertain) {
+      const messages = [];
+      if (state.warnings.amountUncertain) {
+        messages.push("Nismo sigurni u iznos. Molimo provjerite.");
+      }
+      if (state.warnings.titleUncertain) {
+        messages.push("Nismo sigurni u naziv trgovine. Molimo upišite točan naziv.");
+      }
+      elements.receiptWarning.textContent = messages.join(" ");
+      elements.receiptWarning.hidden = false;
+    } else {
+      elements.receiptWarning.hidden = true;
     }
-    if (!elements.monthSelect.value) {
-      elements.monthSelect.value = today.slice(0, 7);
+  }
+
+  function addTransaction(entry) {
+    state.transactions.push(entry);
+    saveTransactions(state.transactions);
+    updateSummary();
+    if (state.activeView === "history") {
+      renderTable();
     }
   }
 
-  function handleReset() {
-    resetFeedback();
-    stateMachine.transition("CANCEL");
-    setDefaultValues();
+  function handleManualSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(elements.manualForm);
+    const type = formData.get("type");
+    const title = formData.get("name").trim();
+    const category = formData.get("category").trim();
+    const amount = Number(formData.get("amount"));
+    const date = formData.get("date");
+    const note = formData.get("note").trim();
+
+    if (!type || !title || !category || !date || isNaN(amount)) {
+      elements.manualFeedback.textContent =
+        "Molimo ispunite Tip, Naziv, Kategoriju, Datum i Iznos.";
+      return;
+    }
+
+    const entry = {
+      id: crypto.randomUUID(),
+      type,
+      title,
+      category,
+      amount,
+      date,
+      note,
+    };
+
+    addTransaction(entry);
+    elements.manualFeedback.textContent = "Stavka je spremljena.";
+    resetManualForm();
+    setActiveView("home");
   }
 
-  function attachTableListeners() {
-    elements.tableBody.addEventListener("click", (event) => {
-      const button = event.target.closest(".delete-button");
-      if (!button) return;
-      const id = button.dataset.id;
-      currentDeleteId = id;
-      stateMachine.transition("CLICK_DELETE");
-      openConfirmDialog();
-    });
-  }
+  function handleDelete(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.classList.contains("delete-button")) return;
 
-  function openConfirmDialog() {
+    currentDeleteId = target.dataset.id;
+    if (!currentDeleteId) return;
+
     if (typeof elements.confirmDialog.showModal === "function") {
       elements.confirmDialog.showModal();
-    } else {
-      const confirmDelete = window.confirm(
-        "Jeste li sigurni da želite obrisati ovu stavku?"
-      );
-      if (confirmDelete) {
-        executeDelete();
-      } else {
-        stateMachine.transition("CANCEL");
-      }
+    } else if (confirm("Jeste li sigurni da želite obrisati ovu stavku?")) {
+      confirmDelete();
     }
   }
 
-  function executeDelete() {
-    if (!currentDeleteId) {
-      stateMachine.transition("CANCEL");
-      return;
-    }
-
-    stateMachine.transition("CONFIRM_DELETE");
-    try {
-      const allTransactions = loadTransactions();
-      const updated = allTransactions.filter((item) => item.id !== currentDeleteId);
-      saveTransactions(updated);
-      currentDeleteId = null;
-      stateMachine.transition("API_OK");
-      renderDashboard();
-    } catch (error) {
-      console.error("Brisanje nije uspjelo", error);
-      stateMachine.transition("API_FAIL");
-      showFeedback("Brisanje nije uspjelo. Pokušajte ponovno.", "error");
-    }
+  function confirmDelete() {
+    if (!currentDeleteId) return;
+    state.transactions = state.transactions.filter((item) => item.id !== currentDeleteId);
+    saveTransactions(state.transactions);
+    updateSummary();
+    renderTable();
+    currentDeleteId = null;
   }
 
   function handleDialogClose(event) {
-    const value = event.target.returnValue;
-    if (value === "confirm") {
-      executeDelete();
+    if (event.target.returnValue === "confirm") {
+      confirmDelete();
     } else {
       currentDeleteId = null;
-      stateMachine.transition("CANCEL");
     }
   }
 
-  function initMonthSelect() {
-    const todayMonth = new Date().toISOString().slice(0, 7);
-    elements.monthSelect.value = todayMonth;
-    elements.monthSelect.addEventListener("change", () => {
-      stateMachine.transition("CHANGE_MONTH");
-      renderDashboard();
+  function handleMonthChange(event) {
+    state.month = event.target.value;
+    updateSummary();
+    if (state.activeView === "history") {
+      renderTable();
+    }
+  }
+
+  function handleCaptureClick() {
+    elements.captureInput.click();
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
     });
   }
 
-  function initReceiptCapture() {
-    if (!elements.captureButton || !elements.captureInput) {
+  function simulateOcr(textSample) {
+    const sample = textSample.toLowerCase();
+    let detected = {
+      title: "",
+      amount: "",
+      date: "",
+      category: "",
+      type: "expense",
+      note: "račun skeniran",
+      confidence: 0.65,
+    };
+
+    const vendor = VENDOR_HINTS.find((hint) => sample.includes(hint.keyword));
+    if (vendor) {
+      detected.title = vendor.title;
+      detected.category = vendor.category;
+      detected.type = vendor.type;
+      detected.confidence = 0.82;
+    }
+
+    const incomeMatch = INCOME_KEYWORDS.some((keyword) => sample.includes(keyword));
+    const expenseMatch = EXPENSE_KEYWORDS.some((keyword) => sample.includes(keyword));
+    if (incomeMatch && !expenseMatch) {
+      detected.type = "income";
+      detected.category = detected.category || "Plaća";
+      detected.confidence = Math.max(detected.confidence, 0.78);
+    }
+
+    const amountMatch = sample.match(/(\d+[\.,]\d{2})/);
+    if (amountMatch) {
+      detected.amount = amountMatch[1].replace(",", ".");
+      detected.confidence = Math.max(detected.confidence, 0.8);
+    }
+
+    const dateMatch = sample.match(/(\d{4}-\d{2}-\d{2})|(\d{2}[\.\/-]\d{2}[\.\/-]\d{4})/);
+    if (dateMatch) {
+      const raw = dateMatch[0];
+      if (raw.includes("-")) {
+        detected.date = raw;
+      } else {
+        const [day, month, year] = raw.split(/[\.\/-]/);
+        detected.date = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      }
+    }
+
+    const warnings = {
+      amountUncertain: !detected.amount || detected.confidence < 0.75,
+      titleUncertain: !detected.title || detected.confidence < 0.75,
+    };
+
+    if (warnings.amountUncertain || warnings.titleUncertain) {
+      detected.confidence = Math.min(detected.confidence, 0.7);
+    }
+
+    return { detected, warnings };
+  }
+
+  async function handleCaptureChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
       return;
     }
 
-    const preferences = loadReceiptPreferences();
-    receiptState.discardImages = preferences.discardImages;
-    if (elements.discardImages) {
-      elements.discardImages.checked = preferences.discardImages;
-      elements.discardImages.addEventListener("change", (event) => {
-        receiptState.discardImages = Boolean(event.target.checked);
-        saveReceiptPreferences({ discardImages: receiptState.discardImages });
-      });
+    try {
+      elements.captureBlock.hidden = true;
+      elements.receiptFeedback.textContent = "";
+
+      const imageUrl = await readFileAsDataURL(file);
+      elements.receiptImage.src = imageUrl;
+
+      const { detected, warnings } = simulateOcr(file.name);
+      state.ocrResult = detected;
+      state.warnings = warnings;
+      elements.receiptForm.hidden = false;
+      updateReceiptFields();
+
+      if (!state.settings.discardImages) {
+        elements.receiptNote.value = `${detected.note || ""} (slika sačuvana)`;
+      }
+    } catch (error) {
+      console.error("Greška pri očitanju slike", error);
+      elements.receiptFeedback.textContent =
+        "OCR nije uspio. Fokusirajte kameru i pokušajte ponovno.";
+      elements.captureBlock.hidden = false;
+    }
+  }
+
+  function handleReceiptSubmit(event) {
+    event.preventDefault();
+
+    const type = elements.receiptType.value;
+    const title = elements.receiptName.value.trim();
+    const amount = Number(elements.receiptAmount.value);
+    const date = elements.receiptDate.value;
+    const category = elements.receiptCategory.value.trim();
+    const note = elements.receiptNote.value.trim();
+
+    if (!type || !title || !date || isNaN(amount)) {
+      elements.receiptFeedback.textContent =
+        "Molimo provjerite Tip, Naziv, Datum i Iznos prije spremanja.";
+      return;
     }
 
-    toggleReceiptFields(false);
+    const entry = {
+      id: crypto.randomUUID(),
+      type,
+      title,
+      category,
+      amount,
+      date,
+      note,
+    };
 
+    addTransaction(entry);
+    elements.receiptFeedback.textContent = "Stavka je spremljena.";
+    resetReceiptForm();
+    setActiveView("home");
+  }
+
+  function handleSettingsSubmit(event) {
+    event.preventDefault();
+    const discardImages = elements.settingsDiscardImages.checked;
+    const categoriesText = elements.settingsCategories.value;
+    const categories = categoriesText
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    state.settings = {
+      discardImages,
+      categories: categories.length ? categories : [...DEFAULT_CATEGORIES],
+    };
+    elements.discardImages.checked = discardImages;
+    saveSettings(state.settings);
+    syncCategoryOptions();
+    elements.settingsFeedback.textContent = "Postavke su spremljene.";
+  }
+
+  function handleDiscardToggle(event) {
+    state.settings.discardImages = event.target.checked;
+    elements.settingsDiscardImages.checked = state.settings.discardImages;
+    saveSettings(state.settings);
+  }
+
+  function handleSettingsDiscardToggle(event) {
+    state.settings.discardImages = event.target.checked;
+    elements.discardImages.checked = state.settings.discardImages;
+    saveSettings(state.settings);
+  }
+
+  function hydrateSettingsForm() {
+    elements.settingsDiscardImages.checked = state.settings.discardImages;
+    elements.settingsCategories.value = state.settings.categories.join(", ");
+    elements.discardImages.checked = state.settings.discardImages;
+  }
+
+  function restoreState() {
+    state.transactions = loadTransactions();
+    state.settings = loadSettings();
+    state.month = currentMonthString();
+    elements.monthSelect.value = state.month;
+    syncCategoryOptions();
+    hydrateSettingsForm();
+    resetManualForm();
+    updateSummary();
+  }
+
+  function bindEvents() {
+    elements.menuToggle.addEventListener("click", openSidebar);
+    elements.menuClose.addEventListener("click", closeSidebar);
+
+    elements.navButtons.forEach((button) => {
+      button.addEventListener("click", () => setActiveView(button.dataset.view));
+    });
+
+    elements.monthSelect.addEventListener("change", handleMonthChange);
+    elements.manualForm.addEventListener("submit", handleManualSubmit);
+    elements.manualForm.addEventListener("reset", () => {
+      setTimeout(resetManualForm, 0);
+    });
+    elements.manualForm.addEventListener("input", captureManualState);
     elements.captureButton.addEventListener("click", handleCaptureClick);
     elements.captureInput.addEventListener("change", handleCaptureChange);
-    elements.receiptForm?.addEventListener("submit", handleReceiptSave);
-    elements.receiptEdit?.addEventListener("click", handleReceiptEdit);
-    elements.receiptRetake?.addEventListener("click", handleReceiptRetake);
-  }
-
-  function initForm() {
-    setDefaultValues();
-    elements.form.addEventListener("submit", handleSubmit);
-    elements.form.addEventListener("reset", handleReset);
-    elements.form.addEventListener("input", () => {
-      stateMachine.transition("FILL_FORM");
-    });
-  }
-
-  function initDialog() {
-    if (!elements.confirmDialog) return;
+    elements.receiptRetake.addEventListener("click", resetReceiptForm);
+    elements.receiptForm.addEventListener("submit", handleReceiptSubmit);
+    elements.tableBody.addEventListener("click", handleDelete);
     elements.confirmDialog.addEventListener("close", handleDialogClose);
+    elements.discardImages.addEventListener("change", handleDiscardToggle);
+    elements.settingsForm.addEventListener("submit", handleSettingsSubmit);
+    elements.settingsDiscardImages.addEventListener("change", handleSettingsDiscardToggle);
   }
 
-  function init() {
-    initMonthSelect();
-    initReceiptCapture();
-    initForm();
-    initDialog();
-    attachTableListeners();
-    populateCategories();
-    renderDashboard();
-  }
-
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", () => {
+    restoreState();
+    bindEvents();
+    setActiveView("home");
+  });
 })();

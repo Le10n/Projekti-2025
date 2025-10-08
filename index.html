@@ -15,263 +15,281 @@
     <script src="app.js" defer></script>
   </head>
   <body>
-    <header class="page-header">
-      <div class="title-group">
-        <h1>Financijski tracker</h1>
-        <p class="subtitle">
-          Vaša digitalna kućna bilježnica za praćenje prihoda i troškova.
-        </p>
-      </div>
-      <label class="month-picker">
-        <span>Odaberite mjesec</span>
-        <input type="month" id="month-select" name="month-select" />
-      </label>
-    </header>
-
-    <main>
-      <section class="summary" aria-label="Sažeci financija">
-        <article class="summary-card" aria-live="polite">
-          <h2>Prihodi</h2>
-          <p id="income-total" class="summary-value">€ 0,00</p>
-        </article>
-        <article class="summary-card" aria-live="polite">
-          <h2>Troškovi</h2>
-          <p id="expense-total" class="summary-value">€ 0,00</p>
-        </article>
-        <article class="summary-card" aria-live="polite">
-          <h2>Saldo</h2>
-          <p id="balance-total" class="summary-value">€ 0,00</p>
-        </article>
-      </section>
-
-      <section class="content-grid">
-        <section class="card form-card" aria-label="Nova transakcija">
-          <header>
-            <h2>Nova transakcija</h2>
-          </header>
-          <div class="receipt-capture" aria-live="polite">
-            <button
-              type="button"
-              id="capture-button"
-              class="capture-button"
-            >
-              📷 Uslikaj račun
-            </button>
-            <p class="capture-help">
-              Uslikajte račun da ga ne unosite ručno. Fotografije se koriste samo
-              za očitanje podataka i zatim se brišu.
-            </p>
-            <label class="privacy-toggle">
-              <input type="checkbox" id="discard-images" checked />
-              Ne spremamo fotografije nakon očitanja
-            </label>
-            <input
-              type="file"
-              id="capture-input"
-              accept="image/*"
-              capture="environment"
-              hidden
-            />
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Glavni izbornik">
+        <div class="sidebar-header">
+          <button id="menu-toggle" class="menu-toggle" aria-label="Otvori izbornik">
+            ☰
+          </button>
+          <div>
+            <h1>Financijski tracker</h1>
+            <p class="tagline">Vaša digitalna kućna bilježnica</p>
           </div>
-          <section
-            id="receipt-review"
-            class="receipt-review"
-            aria-label="Pregled skeniranog računa"
-            hidden
-          >
-            <div class="receipt-preview">
-              <img id="receipt-image" alt="Pregled računa" />
-            </div>
-            <div class="receipt-info">
-              <h3>Prepoznali smo</h3>
-              <ul id="receipt-summary" class="receipt-summary"></ul>
-              <p id="receipt-warning" class="feedback warning" hidden></p>
-            </div>
-            <form id="receipt-form" novalidate>
-              <div class="receipt-fields">
+        </div>
+        <nav>
+          <button class="nav-button" data-view="home">
+            <span aria-hidden="true">🏠</span>
+            <span>Početna</span>
+          </button>
+          <button class="nav-button" data-view="manual">
+            <span aria-hidden="true">✍️</span>
+            <span>Nova stavka</span>
+          </button>
+          <button class="nav-button" data-view="camera">
+            <span aria-hidden="true">📷</span>
+            <span>Slikaj račun</span>
+          </button>
+          <button class="nav-button" data-view="history">
+            <span aria-hidden="true">📜</span>
+            <span>Povijest</span>
+          </button>
+          <button class="nav-button" data-view="settings">
+            <span aria-hidden="true">⚙️</span>
+            <span>Postavke</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <button id="menu-close" class="menu-close" aria-label="Zatvori izbornik">
+            ✕
+          </button>
+          <div>
+            <h2 id="view-title">Početna</h2>
+            <p id="view-description" class="view-description"></p>
+          </div>
+        </header>
+
+        <section class="view" data-view="home">
+          <div class="home-controls">
+            <label class="month-picker">
+              <span>Odaberite mjesec</span>
+              <input type="month" id="month-select" name="month-select" />
+            </label>
+          </div>
+          <div class="summary" aria-label="Sažeci financija">
+            <article class="summary-card" aria-live="polite">
+              <h3>Prihodi</h3>
+              <p id="income-total" class="summary-value">€ 0,00</p>
+            </article>
+            <article class="summary-card" aria-live="polite">
+              <h3>Troškovi</h3>
+              <p id="expense-total" class="summary-value">€ 0,00</p>
+            </article>
+            <article class="summary-card" aria-live="polite">
+              <h3>Saldo</h3>
+              <p id="balance-total" class="summary-value">€ 0,00</p>
+            </article>
+          </div>
+          <section class="card chart-card" aria-label="Graf potrošnje">
+            <header>
+              <h3>Pregled mjeseca</h3>
+            </header>
+            <p class="chart-hint">Prikažite na što odlazi najviše sredstava u odabranom mjesecu.</p>
+            <canvas id="category-chart" aria-label="Kružni graf po kategorijama"></canvas>
+          </section>
+        </section>
+
+        <section class="view" data-view="manual" hidden>
+          <section class="card form-card" aria-label="Ručno dodavanje transakcije">
+            <header>
+              <h3>Nova stavka</h3>
+              <p>Ručno unesite Prihod ili Trošak.</p>
+            </header>
+            <form id="transaction-form" novalidate>
+              <div class="form-grid">
                 <div class="form-group">
-                  <label for="receipt-type"
-                    >Tip <span aria-hidden="true">*</span></label
-                  >
-                  <select id="receipt-type" name="type">
+                  <label for="type">Tip <span aria-hidden="true">*</span></label>
+                  <select id="type" name="type" required>
+                    <option value="">Odaberite...</option>
                     <option value="income">Prihod</option>
                     <option value="expense">Trošak</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="receipt-name"
-                    >Naziv <span aria-hidden="true">*</span></label
-                  >
+                  <label for="name">Naziv <span aria-hidden="true">*</span></label>
                   <input
                     type="text"
-                    id="receipt-name"
+                    id="name"
                     name="name"
                     autocomplete="off"
+                    placeholder="npr. Konzum"
+                    required
                   />
                 </div>
                 <div class="form-group">
-                  <label for="receipt-category"
-                    >Kategorija <span aria-hidden="true">*</span></label
-                  >
+                  <label for="category">Kategorija <span aria-hidden="true">*</span></label>
                   <input
                     list="category-options"
-                    id="receipt-category"
+                    id="category"
                     name="category"
-                    autocomplete="off"
+                    placeholder="npr. Hrana"
+                    required
                   />
                 </div>
                 <div class="form-group">
-                  <label for="receipt-amount"
-                    >Iznos (€) <span aria-hidden="true">*</span></label
-                  >
+                  <label for="amount">Iznos (€) <span aria-hidden="true">*</span></label>
                   <input
                     type="number"
-                    id="receipt-amount"
+                    id="amount"
                     name="amount"
                     min="0"
                     step="0.01"
                     inputmode="decimal"
+                    placeholder="npr. 25,00"
+                    required
                   />
                 </div>
                 <div class="form-group">
-                  <label for="receipt-date"
-                    >Datum <span aria-hidden="true">*</span></label
-                  >
-                  <input type="date" id="receipt-date" name="date" />
+                  <label for="date">Datum <span aria-hidden="true">*</span></label>
+                  <input type="date" id="date" name="date" required />
                 </div>
-                <div class="form-group">
-                  <label for="receipt-note">Bilješka</label>
-                  <textarea
-                    id="receipt-note"
-                    name="note"
-                    rows="2"
-                    placeholder="npr. račun skeniran"
-                  ></textarea>
+                <div class="form-group full">
+                  <label for="note">Bilješka (opcionalno)</label>
+                  <textarea id="note" name="note" rows="2" placeholder="Kratki opis"></textarea>
                 </div>
               </div>
-              <div class="receipt-actions">
-                <button type="submit" class="primary-button">
-                  Spremi
-                </button>
-                <button
-                  type="button"
-                  id="receipt-edit"
-                  class="secondary-button"
-                >
-                  Uredi
-                </button>
-                <button
-                  type="button"
-                  id="receipt-retake"
-                  class="secondary-button"
-                >
-                  Ponovno skeniraj
-                </button>
+              <div class="form-actions">
+                <button type="submit" class="primary-button">Spremi</button>
+                <button type="reset" class="secondary-button">Odustani</button>
+              </div>
+              <p id="form-feedback" class="feedback" role="alert" aria-live="polite"></p>
+            </form>
+          </section>
+        </section>
+
+        <section class="view" data-view="camera" hidden>
+          <section class="card form-card" aria-label="Slikaj račun">
+            <header>
+              <h3>Slikaj račun</h3>
+              <p>Uslikajte račun pa potvrdite podatke prije spremanja.</p>
+            </header>
+            <div class="capture-block" id="capture-block">
+              <button type="button" id="capture-button" class="primary-button capture-button">
+                Otvori kameru / galeriju
+              </button>
+              <p class="capture-help">
+                Slikajte na svjetlu. Držite mirno. Račun neka ispuni ekran.
+              </p>
+              <label class="toggle">
+                <input type="checkbox" id="discard-images" checked />
+                <span>Ne spremamo fotografije nakon očitanja</span>
+              </label>
+              <input
+                type="file"
+                id="capture-input"
+                accept="image/*"
+                capture="environment"
+                hidden
+              />
+            </div>
+
+            <form id="receipt-form" class="receipt-form" hidden novalidate>
+              <div class="receipt-layout">
+                <div class="receipt-preview">
+                  <img id="receipt-image" alt="Pregled računa" />
+                  <button type="button" id="receipt-retake" class="secondary-button">
+                    Ponovno slikaj
+                  </button>
+                </div>
+                <div class="receipt-fields">
+                  <p id="receipt-warning" class="feedback warning" role="alert" hidden></p>
+                  <div class="form-group">
+                    <label for="receipt-type">Tip <span aria-hidden="true">*</span></label>
+                    <select id="receipt-type" name="type">
+                      <option value="income">Prihod</option>
+                      <option value="expense">Trošak</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="receipt-name">Naziv trgovine <span aria-hidden="true">*</span></label>
+                    <input type="text" id="receipt-name" name="name" autocomplete="off" />
+                  </div>
+                  <div class="form-group">
+                    <label for="receipt-amount">Iznos (€) <span aria-hidden="true">*</span></label>
+                    <input
+                      type="number"
+                      id="receipt-amount"
+                      name="amount"
+                      min="0"
+                      step="0.01"
+                      inputmode="decimal"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="receipt-date">Datum <span aria-hidden="true">*</span></label>
+                    <input type="date" id="receipt-date" name="date" />
+                  </div>
+                  <div class="form-group">
+                    <label for="receipt-category">Kategorija</label>
+                    <input list="category-options" id="receipt-category" name="category" />
+                  </div>
+                  <div class="form-group full">
+                    <label for="receipt-note">Bilješka</label>
+                    <textarea id="receipt-note" name="note" rows="2" placeholder="račun skeniran"></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-button">Spremi</button>
               </div>
               <p id="receipt-feedback" class="feedback" role="alert"></p>
             </form>
           </section>
-          <form id="transaction-form" novalidate>
-            <div class="form-group">
-              <label for="type">Tip <span aria-hidden="true">*</span></label>
-              <select id="type" name="type" required>
-                <option value="">Odaberite...</option>
-                <option value="income">Prihod</option>
-                <option value="expense">Trošak</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="name">Naziv <span aria-hidden="true">*</span></label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                autocomplete="off"
-                placeholder="npr. Mirovina"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="category">Kategorija <span aria-hidden="true">*</span></label>
-              <input
-                list="category-options"
-                id="category"
-                name="category"
-                placeholder="npr. Hrana"
-                required
-              />
-              <datalist id="category-options"></datalist>
-            </div>
-            <div class="form-group">
-              <label for="amount">Iznos (€) <span aria-hidden="true">*</span></label>
-              <input
-                type="number"
-                id="amount"
-                name="amount"
-                min="0"
-                step="0.01"
-                inputmode="decimal"
-                placeholder="npr. 25.00"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="date">Datum <span aria-hidden="true">*</span></label>
-              <input type="date" id="date" name="date" required />
-            </div>
-            <div class="form-group">
-              <label for="note">Bilješka (opcionalno)</label>
-              <textarea
-                id="note"
-                name="note"
-                rows="2"
-                placeholder="Kratki opis"
-              ></textarea>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="primary-button">Spremi</button>
-              <button type="reset" class="secondary-button">Odustani</button>
-            </div>
-            <p id="form-feedback" class="feedback" role="alert" aria-live="polite"></p>
-          </form>
         </section>
 
-        <section class="card charts-card" aria-label="Grafovi">
-          <header>
-            <h2>Grafovi</h2>
-          </header>
-          <div class="chart-wrapper">
-            <h3>Potrošnja po kategorijama</h3>
-            <canvas id="category-chart" aria-label="Kružni graf troškova"></canvas>
-          </div>
-          <div class="chart-wrapper">
-            <h3>Trend prihoda i troškova</h3>
-            <canvas id="trend-chart" aria-label="Linijski graf trendova"></canvas>
-          </div>
+        <section class="view" data-view="history" hidden>
+          <section class="card table-card" aria-label="Povijest transakcija">
+            <header>
+              <h3>Povijest</h3>
+              <p>Pregledajte sve stavke za odabrani mjesec.</p>
+            </header>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Datum</th>
+                    <th scope="col">Tip</th>
+                    <th scope="col">Naziv</th>
+                    <th scope="col">Kategorija</th>
+                    <th scope="col" class="amount-column">Iznos</th>
+                    <th scope="col">Brisanje</th>
+                  </tr>
+                </thead>
+                <tbody id="transaction-body"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
-      </section>
 
-      <section class="card table-card" aria-label="Tablica transakcija">
-        <header>
-          <h2>Transakcije</h2>
-        </header>
-        <div class="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Datum</th>
-                <th scope="col">Tip</th>
-                <th scope="col">Naziv</th>
-                <th scope="col">Kategorija</th>
-                <th scope="col" class="amount-column">Iznos</th>
-                <th scope="col">Brisanje</th>
-              </tr>
-            </thead>
-            <tbody id="transaction-body"></tbody>
-          </table>
-        </div>
-      </section>
-    </main>
+        <section class="view" data-view="settings" hidden>
+          <section class="card settings-card" aria-label="Postavke">
+            <header>
+              <h3>Postavke</h3>
+            </header>
+            <form id="settings-form">
+              <label class="toggle">
+                <input type="checkbox" id="settings-discard-images" checked />
+                <span>Ne spremaj fotografije nakon očitanja (preporučeno)</span>
+              </label>
+              <div class="form-group">
+                <label for="settings-categories">Predložene kategorije</label>
+                <textarea
+                  id="settings-categories"
+                  rows="4"
+                  placeholder="Unesite kategorije odvojene zarezom"
+                ></textarea>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary-button">Spremi postavke</button>
+              </div>
+              <p id="settings-feedback" class="feedback" role="alert"></p>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
 
     <dialog id="confirm-dialog">
       <form method="dialog">
@@ -282,5 +300,7 @@
         </menu>
       </form>
     </dialog>
+
+    <datalist id="category-options"></datalist>
   </body>
 </html>

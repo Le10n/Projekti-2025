@@ -15,34 +15,40 @@
     <script src="app.js" defer></script>
   </head>
   <body>
-    <div class="layout">
-      <aside class="sidebar" aria-label="Glavni izbornik">
+    <div class="page">
+      <header class="topbar" aria-label="Zaglavlje aplikacije">
         <div class="brand">
           <h1>Financijski tracker</h1>
           <p>Vaša digitalna kućna bilježnica</p>
         </div>
-        <nav>
-          <button class="nav-button is-active" data-view="home">
-            <span aria-hidden="true">🏠</span>
-            <span>Početna</span>
-          </button>
-          <button class="nav-button" data-view="manual">
-            <span aria-hidden="true">✍️</span>
-            <span>Nova stavka</span>
-          </button>
-          <button class="nav-button" data-view="history">
-            <span aria-hidden="true">📜</span>
-            <span>Povijest</span>
-          </button>
-          <button class="nav-button" data-view="report">
-            <span aria-hidden="true">📄</span>
-            <span>Izvještaj</span>
-          </button>
-        </nav>
-        <p class="sidebar-hint">
-          Odaberite jednu radnju. Sve je uvijek na dohvat ruke i bez skrivenih izbornika.
-        </p>
-      </aside>
+        <label class="month-picker">
+          <span>Odaberite mjesec</span>
+          <input type="month" id="month-select" name="month-select" />
+        </label>
+      </header>
+
+      <nav class="section-nav" aria-label="Glavni izbornik">
+        <button class="nav-button is-active" data-view="home">
+          <span aria-hidden="true">🏠</span>
+          <span>Početna</span>
+        </button>
+        <button class="nav-button" data-view="manual">
+          <span aria-hidden="true">✍️</span>
+          <span>Nova stavka</span>
+        </button>
+        <button class="nav-button" data-view="history">
+          <span aria-hidden="true">📜</span>
+          <span>Povijest</span>
+        </button>
+        <button class="nav-button" data-view="report">
+          <span aria-hidden="true">📄</span>
+          <span>Izvještaj</span>
+        </button>
+      </nav>
+
+      <p class="nav-hint">
+        Odaberite željenu sekciju. Sve je pregledno raspoređeno na jednoj stranici.
+      </p>
 
       <main class="main" aria-live="polite">
         <header class="toolbar">
@@ -50,10 +56,6 @@
             <h2 id="view-title">Početna</h2>
             <p id="view-description">Sažeci i pregled potrošnje za odabrani mjesec.</p>
           </div>
-          <label class="month-picker">
-            <span>Odaberite mjesec</span>
-            <input type="month" id="month-select" name="month-select" />
-          </label>
         </header>
 
         <section class="view" data-view="home">

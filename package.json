@@ -1,0 +1,16 @@
+{
+  "name": "financijski-tracker",
+  "version": "1.0.0",
+  "description": "Financijski tracker s backendom za transakcije, budžete i korisničke račune",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.4.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

@@ -1,70 +1,43 @@
-# Projekti-2025
-💰 Financijski Tracker
+# Financijski tracker
 
-Interaktivna web aplikacija za praćenje osobnih financija — jednostavna, pregledna i prilagođena svim korisnicima, uključujući starije osobe.
-Omogućuje unos prihoda i troškova, automatski izračun salda, vizualne prikaze kroz grafove i jednostavno brisanje ili pregled transakcija po mjesecima.
+Sve-u-jednom aplikacija za kućne, obiteljske i poslovne financije. Sustav je prilagođen desktopu, s trajnim sidebarom, velikim fontom i jasnim koracima prilagođenima starijim korisnicima.
 
-🧭 Glavne značajke
+## Glavne značajke
 
-Mjesečni pregled: Brzi uvid u prihode, troškove i saldo za odabrani mjesec.
+- **Korisnički računi** – registracija s tipovima računa (osobni, obiteljski, poslovni), prijava, profil i mogućnost trajnog brisanja podataka.
+- **Mjesečni budžet** – unos budžeta po mjesecu, vizualna traka potrošnje i upozorenje ako je budžet premašen.
+- **Transakcije** – ručni unos prihoda i troškova, filteri (datum od/do, kategorija, tip), kalendarski pregled i tablica s brisanjem.
+- **Grafovi** – padajući izbornik s Pie / Line / Bar prikazom na temelju kategorija i mjesečnog trenda prihoda/troškova.
+- **Izvještaj (A4 / PDF)** – strukturirani mjesečni izvadak s izdavateljem/primateljem, sažetkom i stavkama spreman za `Print to PDF`.
+- **Budžeti, ponavljanja i backup** – budžet po mjesecu, ponavljajuće stavke (1.–28. u mjesecu), gumb “Primijeni ponavljajuće” te sigurnosne kopije SQLite baze.
 
-Dodavanje transakcija: Jednostavan obrazac za unos prihoda ili troškova s nazivom, kategorijom, iznosom, datumom i bilješkom.
+## Tehnologije
 
-Grafovi:
+- **Frontend**: čisti HTML/CSS/JS + Chart.js
+- **Backend**: Node.js (Express) + SQLite (better-sqlite3), JSON Web Token autentikacija, bcryptjs hashiranje lozinki
 
-Kružni graf – potrošnja po kategorijama.
+## Pokretanje
 
-Linijski graf – trend prihoda i troškova kroz mjesece.
+```bash
+npm install
+npm start
+```
 
-Tablica transakcija: Pregled svih unosa uz mogućnost brisanja pojedinih stavki.
+Server pokreće Express API na `http://localhost:3000/`. Staticki HTML/CSS/JS služe se npr. preko `live-server` ili bilo kojeg statičkog servera. Frontend očekuje da se API nalazi na istom porijeklu (koristite npr. `npm start` u pozadini i otvorite `index.html` kroz dev server).
 
-Automatsko osvježavanje: Nakon svake promjene (dodavanje, brisanje, promjena mjeseca) svi prikazi se ažuriraju u stvarnom vremenu.
+## Ključni API endpointi
 
-Jednostavno i pristupačno sučelje: Veliki font, jasni gumbi, visok kontrast i intuitivan raspored.
+- `POST /auth/register`, `POST /auth/login`
+- `GET/PUT/DELETE /me`
+- `GET /api/transactions` (query: `month`, `from`, `to`, `category`, `type`), `POST /api/transactions`, `DELETE /api/transactions/:id`
+- `GET/PUT /api/budgets/:month`
+- `GET /api/analytics/summary?month=YYYY-MM`
+- `GET /api/analytics/trend?months=N`
+- `GET/POST /api/recurring`, `PUT /api/recurring/:id`, `POST /api/recurring/apply`
+- `GET/POST /api/backups`
 
-⚙️ Kako aplikacija radi
+Sve mutirajuće rute zahtijevaju JWT (`Authorization: Bearer …`).
 
-Po otvaranju se učitavaju podaci za trenutni mjesec.
+## Print / PDF
 
-Novi unos dodaješ putem obrasca (“Nova transakcija”).
-
-Klikom na Spremi aplikacija ažurira tablicu, grafove i sažetke.
-
-Brisanjem stavke ažuriraju se svi prikazi.
-
-Promjenom mjeseca prikazuju se samo transakcije iz tog razdoblja.
-
-🧩 Tehnička logika (DFA model)
-
-Aplikacija koristi jednostavni deterministički konačni automat (DFA) za kontrolu stanja:
-
-IDLE → FORM_EDITING → SUBMITTING → IDLE / ERROR
-
-IDLE → DELETING → SUBMITTING → IDLE
-Ovakva struktura osigurava pouzdan rad i brzu reakciju aplikacije bez grešaka.
-
-🔒 Sigurnost i privatnost
-
-Svi podaci ostaju lokalno (nema slanja trećim stranama).
-
-Validacija unosa (iznos mora biti broj, obavezna polja).
-
-Jasne poruke o greškama i mogućnost ponovnog pokušaja.
-
-👵 Dizajnirano i za starije korisnike
-
-Veliki, pregledni gumbi i tekst.
-
-Jasne upute i potvrde (“Jeste li sigurni?”).
-
-Automatski predložen današnji datum pri unosu.
-
-Predefinirane kategorije (Mirovina, Hrana, Režije, Lijekovi, itd.).
-
-🛠️ Tehnologije
-
-HTML, CSS, JavaScript (frontend)
-
-SQLite / lokalna pohrana (backend ili localStorage)
-
-D3.js ili Chart.js za grafove
+Stranica **Izvještaj** koristi `window.print()` i prilagođene `@media print` stilove (A4 margine 20 mm, skriven sidebar i alati) tako da korisnik kroz “Ispiši / PDF” dobije uredan mjesečni izvadak.

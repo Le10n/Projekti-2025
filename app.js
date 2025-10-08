@@ -254,6 +254,12 @@
     if (companyName) {
       companyName.required = accountType === 'business';
     }
+
+    if (accountType === 'business' && businessFields && !businessFields.hidden) {
+      requestAnimationFrame(() => {
+        businessFields.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   }
 
   function showApp() {

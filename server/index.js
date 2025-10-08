@@ -2,16 +2,33 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { db, backupDatabase, listBackups } from './db.js';
 import { makeJwt, authMiddleware } from './auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CLIENT_DIR = path.join(__dirname, '..');
 
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use('/backups', express.static('backups'));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'index.html'));
+});
+
+app.get('/styles.css', (req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'styles.css'));
+});
+
+app.get('/app.js', (req, res) => {
+  res.sendFile(path.join(CLIENT_DIR, 'app.js'));
+});
 
 function ensureAdult(dob) {
   if (!dob) return true;
@@ -470,6 +487,13 @@ app.post('/api/backups', authMiddleware, async (req, res) => {
 app.get('/api/backups', authMiddleware, (req, res) => {
   const backups = listBackups(req.user.account_id);
   res.json(backups);
+});
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/auth') || req.path.startsWith('/api') || req.path.startsWith('/backups')) {
+    return res.status(404).json({ error: 'Ruta nije pronađena.' });
+  }
+  res.sendFile(path.join(CLIENT_DIR, 'index.html'));
 });
 
 app.listen(PORT, () => {

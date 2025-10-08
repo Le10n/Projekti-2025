@@ -132,39 +132,39 @@
     </div>
 
     <div class="layout" aria-hidden="true">
-      <aside class="sidebar" aria-label="Bočni izbornik">
-        <div class="sidebar-header">
+      <header class="app-header">
+        <div class="brand">
           <h1>Financijski tracker</h1>
           <p>Jasna kontrola financija</p>
         </div>
-        <nav class="sidebar-nav" aria-label="Glavni izbornik">
-          <button class="sidebar-link is-active" data-view="home">🏠 Početna</button>
-          <button class="sidebar-link" data-view="manual">✍️ Nova stavka</button>
-          <button class="sidebar-link" data-view="history">📜 Povijest</button>
-          <button class="sidebar-link" data-view="report">📄 Izvještaj</button>
-          <button class="sidebar-link" data-view="settings">⚙️ Postavke</button>
+        <nav class="app-nav" aria-label="Glavni izbornik">
+          <button class="nav-button is-active" data-view="home">Početna</button>
+          <button class="nav-button" data-view="manual">Nova stavka</button>
+          <button class="nav-button" data-view="history">Povijest</button>
+          <button class="nav-button" data-view="report">Izvještaj</button>
+          <button class="nav-button" data-view="settings">Postavke</button>
         </nav>
-      </aside>
+        <div class="user-menu" aria-label="Korisnički izbornik">
+          <button id="user-menu-toggle" class="user-avatar" aria-haspopup="true" aria-expanded="false">
+            <span aria-hidden="true">👤</span>
+            <span class="sr-only">Osobni podaci</span>
+          </button>
+          <div id="user-dropdown" class="user-dropdown" role="menu" hidden>
+            <button type="button" data-action="profile" role="menuitem">Osobni podaci</button>
+            <button type="button" data-action="logout" role="menuitem">Odjava</button>
+            <button type="button" data-action="delete" role="menuitem" class="danger">Obriši sve podatke</button>
+          </div>
+        </div>
+      </header>
 
-      <div class="main">
-        <header class="main-header">
+      <main class="main">
+        <section class="main-toolbar">
           <div class="month-group">
             <label for="month-select">Mjesec</label>
             <input type="month" id="month-select" name="month-select" />
             <button type="button" id="apply-recurring" class="secondary-button">Primijeni ponavljajuće</button>
           </div>
-          <div class="user-menu" aria-label="Korisnički izbornik">
-            <button id="user-menu-toggle" class="user-avatar" aria-haspopup="true" aria-expanded="false">
-              <span aria-hidden="true">👤</span>
-              <span class="sr-only">Osobni podaci</span>
-            </button>
-            <div id="user-dropdown" class="user-dropdown" role="menu" hidden>
-              <button type="button" data-action="profile" role="menuitem">Osobni podaci</button>
-              <button type="button" data-action="logout" role="menuitem">Odjava</button>
-              <button type="button" data-action="delete" role="menuitem" class="danger">Obriši sve podatke</button>
-            </div>
-          </div>
-        </header>
+        </section>
 
         <section class="view" data-view="home">
           <div class="card budget-card">
@@ -197,14 +197,14 @@
           <section class="card chart-card" aria-label="Graf prikaza">
             <header class="chart-header">
               <h2>Graf</h2>
-              <label>
-                Tip grafa:
-                <select id="chart-type">
-                  <option value="pie">Pie</option>
-                  <option value="line">Line</option>
-                  <option value="bar">Bar</option>
+              <div class="chart-switcher">
+                <span>Tip grafa</span>
+                <select id="chart-type" aria-label="Odaberite tip grafa">
+                  <option value="pie">Kružni</option>
+                  <option value="line">Linijski</option>
+                  <option value="bar">Stupčasti</option>
                 </select>
-              </label>
+              </div>
             </header>
             <div class="chart-wrapper">
               <canvas id="chart-canvas" aria-label="Graf financija"></canvas>
@@ -527,7 +527,7 @@
             </div>
           </section>
         </section>
-      </div>
+      </main>
     </div>
 
     <dialog id="confirm-dialog">

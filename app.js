@@ -25,7 +25,7 @@
 
   const elements = {
     layout: document.querySelector('.layout'),
-    sidebarLinks: document.querySelectorAll('.sidebar-link'),
+    navButtons: document.querySelectorAll('.nav-button'),
     views: document.querySelectorAll('.view'),
     monthSelect: document.getElementById('month-select'),
     applyRecurring: document.getElementById('apply-recurring'),
@@ -240,8 +240,20 @@
 
   function handleAccountTypeChange() {
     const accountType = document.getElementById('account-type').value;
-    document.getElementById('family-fields').hidden = accountType !== 'family';
-    document.getElementById('business-fields').hidden = accountType !== 'business';
+    const familyFields = document.getElementById('family-fields');
+    const businessFields = document.getElementById('business-fields');
+    const householdName = document.getElementById('household-name');
+    const companyName = document.getElementById('company-name');
+
+    familyFields.hidden = accountType !== 'family';
+    businessFields.hidden = accountType !== 'business';
+
+    if (householdName) {
+      householdName.required = accountType === 'family';
+    }
+    if (companyName) {
+      companyName.required = accountType === 'business';
+    }
   }
 
   function showApp() {
@@ -397,6 +409,9 @@
     const ctx = document.getElementById('chart-canvas');
     if (!ctx) return;
     const type = state.chartType;
+    if (elements.chartType.value !== type) {
+      elements.chartType.value = type;
+    }
     const categories = state.summary?.categories ?? [];
     const trend = state.trend ?? [];
     if (chartInstance) {
@@ -730,7 +745,7 @@
 
   function setActiveView(view) {
     state.activeView = view;
-    elements.sidebarLinks.forEach((link) => link.classList.toggle('is-active', link.dataset.view === view));
+    elements.navButtons.forEach((button) => button.classList.toggle('is-active', button.dataset.view === view));
     elements.views.forEach((section) => {
       section.hidden = section.dataset.view !== view;
     });
@@ -742,8 +757,8 @@
     }
   }
 
-  function handleSidebarClick(event) {
-    const button = event.target.closest('.sidebar-link');
+  function handleNavClick(event) {
+    const button = event.target.closest('.nav-button');
     if (!button) return;
     setActiveView(button.dataset.view);
   }
@@ -1073,7 +1088,7 @@
     elements.loginForm.addEventListener('submit', handleLogin);
     elements.registerForm.addEventListener('submit', handleRegister);
     document.getElementById('account-type').addEventListener('change', handleAccountTypeChange);
-    elements.sidebarLinks.forEach((link) => link.addEventListener('click', handleSidebarClick));
+    elements.navButtons.forEach((link) => link.addEventListener('click', handleNavClick));
     elements.userMenuToggle.addEventListener('click', toggleUserMenu);
     elements.userDropdown.addEventListener('click', handleUserMenu);
     document.addEventListener('click', (event) => {
@@ -1104,6 +1119,7 @@
 
   async function init() {
     bindEvents();
+    handleAccountTypeChange();
     initialiseDates();
     state.month = currentMonthString();
     elements.monthSelect.value = state.month;

@@ -49,6 +49,128 @@
           <header>
             <h2>Nova transakcija</h2>
           </header>
+          <div class="receipt-capture" aria-live="polite">
+            <button
+              type="button"
+              id="capture-button"
+              class="capture-button"
+            >
+              📷 Uslikaj račun
+            </button>
+            <p class="capture-help">
+              Uslikajte račun da ga ne unosite ručno. Fotografije se koriste samo
+              za očitanje podataka i zatim se brišu.
+            </p>
+            <label class="privacy-toggle">
+              <input type="checkbox" id="discard-images" checked />
+              Ne spremamo fotografije nakon očitanja
+            </label>
+            <input
+              type="file"
+              id="capture-input"
+              accept="image/*"
+              capture="environment"
+              hidden
+            />
+          </div>
+          <section
+            id="receipt-review"
+            class="receipt-review"
+            aria-label="Pregled skeniranog računa"
+            hidden
+          >
+            <div class="receipt-preview">
+              <img id="receipt-image" alt="Pregled računa" />
+            </div>
+            <div class="receipt-info">
+              <h3>Prepoznali smo</h3>
+              <ul id="receipt-summary" class="receipt-summary"></ul>
+              <p id="receipt-warning" class="feedback warning" hidden></p>
+            </div>
+            <form id="receipt-form" novalidate>
+              <div class="receipt-fields">
+                <div class="form-group">
+                  <label for="receipt-type"
+                    >Tip <span aria-hidden="true">*</span></label
+                  >
+                  <select id="receipt-type" name="type">
+                    <option value="income">Prihod</option>
+                    <option value="expense">Trošak</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="receipt-name"
+                    >Naziv <span aria-hidden="true">*</span></label
+                  >
+                  <input
+                    type="text"
+                    id="receipt-name"
+                    name="name"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="receipt-category"
+                    >Kategorija <span aria-hidden="true">*</span></label
+                  >
+                  <input
+                    list="category-options"
+                    id="receipt-category"
+                    name="category"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="receipt-amount"
+                    >Iznos (€) <span aria-hidden="true">*</span></label
+                  >
+                  <input
+                    type="number"
+                    id="receipt-amount"
+                    name="amount"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="receipt-date"
+                    >Datum <span aria-hidden="true">*</span></label
+                  >
+                  <input type="date" id="receipt-date" name="date" />
+                </div>
+                <div class="form-group">
+                  <label for="receipt-note">Bilješka</label>
+                  <textarea
+                    id="receipt-note"
+                    name="note"
+                    rows="2"
+                    placeholder="npr. račun skeniran"
+                  ></textarea>
+                </div>
+              </div>
+              <div class="receipt-actions">
+                <button type="submit" class="primary-button">
+                  Spremi
+                </button>
+                <button
+                  type="button"
+                  id="receipt-edit"
+                  class="secondary-button"
+                >
+                  Uredi
+                </button>
+                <button
+                  type="button"
+                  id="receipt-retake"
+                  class="secondary-button"
+                >
+                  Ponovno skeniraj
+                </button>
+              </div>
+              <p id="receipt-feedback" class="feedback" role="alert"></p>
+            </form>
+          </section>
           <form id="transaction-form" novalidate>
             <div class="form-group">
               <label for="type">Tip <span aria-hidden="true">*</span></label>

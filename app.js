@@ -1,6 +1,6 @@
 (function () {
   const STORAGE_KEY = "financialTrackerTransactions";
-  const SETTINGS_KEY = "financialTrackerSettings";
+  const PROFILE_KEY = "financialTrackerProfile";
 
   const DEFAULT_CATEGORIES = [
     "Mirovina",
@@ -15,48 +15,6 @@
     "Usluge",
   ];
 
-  const VENDOR_HINTS = [
-    { keyword: "konzum", title: "Konzum", category: "Hrana", type: "expense" },
-    { keyword: "lidl", title: "Lidl", category: "Hrana", type: "expense" },
-    { keyword: "spar", title: "SPAR", category: "Hrana", type: "expense" },
-    { keyword: "plodine", title: "Plodine", category: "Hrana", type: "expense" },
-    { keyword: "ina", title: "INA", category: "Gorivo", type: "expense" },
-    { keyword: "tifon", title: "Tifon", category: "Gorivo", type: "expense" },
-    { keyword: "petrol", title: "Petrol", category: "Gorivo", type: "expense" },
-    { keyword: "hep", title: "HEP", category: "Režije", type: "expense" },
-    { keyword: "telekom", title: "Hrvatski Telekom", category: "Telekom", type: "expense" },
-    { keyword: "telemach", title: "Telemach", category: "Telekom", type: "expense" },
-    { keyword: "mirovina", title: "Mirovina", category: "Mirovina", type: "income" },
-    { keyword: "plaća", title: "Plaća", category: "Plaća", type: "income" },
-    { keyword: "uplata", title: "Uplata", category: "Ostali prihodi", type: "income" },
-    { keyword: "isplata", title: "Isplata", category: "Plaća", type: "income" },
-    { keyword: "ljekarna", title: "Ljekarna", category: "Lijekovi", type: "expense" },
-    { keyword: "restoran", title: "Restoran", category: "Hrana", type: "expense" },
-    { keyword: "račun", title: "Račun", category: "Režije", type: "expense" },
-  ];
-
-  const INCOME_KEYWORDS = [
-    "uplata",
-    "uplaćeno",
-    "isplata",
-    "mirovina",
-    "plaća",
-    "primljeno",
-    "u korist",
-    "credit",
-    "cr",
-  ];
-
-  const EXPENSE_KEYWORDS = [
-    "račun",
-    "fiskalni",
-    "ukupno",
-    "za plaćanje",
-    "pdv",
-    "artikli",
-    "trošak",
-  ];
-
   const formatter = new Intl.NumberFormat("hr-HR", {
     style: "currency",
     currency: "EUR",
@@ -66,15 +24,11 @@
   const viewDetails = {
     home: "Sažeci i pregled potrošnje za odabrani mjesec.",
     manual: "Ručni unos Prihoda ili Troška.",
-    camera: "Slikajte račun, provjerite podatke i spremite.",
     history: "Pregled i brisanje stavki za mjesec.",
-    settings: "Postavite privatnost i popis kategorija.",
+    report: "Priprema mjesečnog izvatka spremnog za ispis.",
   };
 
   const elements = {
-    sidebar: document.querySelector(".sidebar"),
-    menuToggle: document.getElementById("menu-toggle"),
-    menuClose: document.getElementById("menu-close"),
     navButtons: document.querySelectorAll(".nav-button"),
     views: document.querySelectorAll(".view"),
     viewTitle: document.getElementById("view-title"),
@@ -94,25 +48,24 @@
     manualDate: document.getElementById("date"),
     manualNote: document.getElementById("note"),
     manualFeedback: document.getElementById("form-feedback"),
-    captureButton: document.getElementById("capture-button"),
-    captureInput: document.getElementById("capture-input"),
-    captureBlock: document.getElementById("capture-block"),
-    receiptForm: document.getElementById("receipt-form"),
-    receiptImage: document.getElementById("receipt-image"),
-    receiptRetake: document.getElementById("receipt-retake"),
-    receiptWarning: document.getElementById("receipt-warning"),
-    receiptFeedback: document.getElementById("receipt-feedback"),
-    receiptType: document.getElementById("receipt-type"),
-    receiptName: document.getElementById("receipt-name"),
-    receiptAmount: document.getElementById("receipt-amount"),
-    receiptDate: document.getElementById("receipt-date"),
-    receiptCategory: document.getElementById("receipt-category"),
-    receiptNote: document.getElementById("receipt-note"),
-    discardImages: document.getElementById("discard-images"),
-    settingsForm: document.getElementById("settings-form"),
-    settingsDiscardImages: document.getElementById("settings-discard-images"),
-    settingsCategories: document.getElementById("settings-categories"),
-    settingsFeedback: document.getElementById("settings-feedback"),
+    printButton: document.getElementById("print-button"),
+    statementForm: document.getElementById("statement-form"),
+    statementFeedback: document.getElementById("statement-feedback"),
+    statementIssuerName: document.getElementById("statement-issuer-name"),
+    statementIssuerAddress: document.getElementById("statement-issuer-address"),
+    statementIssuerOib: document.getElementById("statement-issuer-oib"),
+    statementRecipientName: document.getElementById("statement-recipient-name"),
+    statementRecipientAddress: document.getElementById("statement-recipient-address"),
+    statementPlace: document.getElementById("statement-place"),
+    statementPreviewPeriod: document.getElementById("statement-period"),
+    statementPreviewIssuer: document.getElementById("preview-issuer"),
+    statementPreviewRecipient: document.getElementById("preview-recipient"),
+    statementSummaryIncome: document.getElementById("summary-income"),
+    statementSummaryExpense: document.getElementById("summary-expense"),
+    statementSummaryBalance: document.getElementById("summary-balance"),
+    statementTableBody: document.getElementById("statement-body"),
+    statementNote: document.getElementById("statement-note"),
+    statementPlaceDate: document.getElementById("statement-place-date"),
   };
 
   let pieChart;
@@ -130,22 +83,13 @@
       date: "",
       note: "",
     },
-    ocrResult: {
-      title: "",
-      amount: "",
-      date: "",
-      category: "",
-      type: "expense",
-      note: "račun skeniran",
-      confidence: 0,
-    },
-    warnings: {
-      amountUncertain: false,
-      titleUncertain: false,
-    },
-    settings: {
-      discardImages: true,
-      categories: [...DEFAULT_CATEGORIES],
+    profile: {
+      issuerName: "Financijski tracker",
+      issuerAddress: "",
+      issuerOib: "",
+      recipientName: "",
+      recipientAddress: "",
+      place: "Rovinj",
     },
   };
 
@@ -163,28 +107,29 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
   }
 
-  function loadSettings() {
+  function loadProfile() {
     try {
-      const stored = localStorage.getItem(SETTINGS_KEY);
+      const stored = localStorage.getItem(PROFILE_KEY);
       if (!stored) {
-        return { discardImages: true, categories: [...DEFAULT_CATEGORIES] };
+        return { ...state.profile };
       }
       const parsed = JSON.parse(stored);
       return {
-        discardImages: parsed.discardImages !== false,
-        categories:
-          Array.isArray(parsed.categories) && parsed.categories.length
-            ? parsed.categories
-            : [...DEFAULT_CATEGORIES],
+        issuerName: parsed.issuerName || "Financijski tracker",
+        issuerAddress: parsed.issuerAddress || "",
+        issuerOib: parsed.issuerOib || "",
+        recipientName: parsed.recipientName || "",
+        recipientAddress: parsed.recipientAddress || "",
+        place: parsed.place || "Rovinj",
       };
     } catch (error) {
-      console.warn("Ne mogu učitati postavke", error);
-      return { discardImages: true, categories: [...DEFAULT_CATEGORIES] };
+      console.warn("Ne mogu učitati profil", error);
+      return { ...state.profile };
     }
   }
 
-  function saveSettings(settings) {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  function saveProfile(profile) {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   }
 
   function setActiveView(view) {
@@ -202,31 +147,23 @@
         ? "Početna"
         : view === "manual"
         ? "Nova stavka"
-        : view === "camera"
-        ? "Slikaj račun"
         : view === "history"
         ? "Povijest"
-        : "Postavke";
+        : "Izvještaj";
     elements.viewDescription.textContent = viewDetails[view] ?? "";
 
-    if (view === "history") {
-      renderTable();
+    if (view === "home") {
+      updateSummary();
     }
     if (view === "manual") {
       prefillManualForm();
     }
-    if (view === "camera") {
-      resetReceiptForm();
+    if (view === "history") {
+      renderTable();
     }
-    closeSidebar();
-  }
-
-  function closeSidebar() {
-    elements.sidebar.classList.remove("open");
-  }
-
-  function openSidebar() {
-    elements.sidebar.classList.add("open");
+    if (view === "report") {
+      renderStatement();
+    }
   }
 
   function formatAmount(value) {
@@ -270,6 +207,7 @@
       }, {});
 
     const ctx = document.getElementById("category-chart");
+    if (!ctx) return;
     const labels = Object.keys(expenseByCategory);
     const data = Object.values(expenseByCategory);
 
@@ -325,7 +263,8 @@
     }
 
     monthly
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .slice()
+      .sort((a, b) => (a.date > b.date ? 1 : -1))
       .forEach((item) => {
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -342,7 +281,7 @@
 
   function syncCategoryOptions() {
     elements.categoryList.innerHTML = "";
-    state.settings.categories.forEach((category) => {
+    DEFAULT_CATEGORIES.forEach((category) => {
       const option = document.createElement("option");
       option.value = category;
       elements.categoryList.appendChild(option);
@@ -384,65 +323,15 @@
     };
   }
 
-  function resetReceiptForm() {
-    elements.captureInput.value = "";
-    elements.captureBlock.hidden = false;
-    elements.receiptForm.hidden = true;
-    elements.receiptImage.src = "";
-    elements.receiptFeedback.textContent = "";
-    elements.receiptWarning.hidden = true;
-    state.ocrResult = {
-      title: "",
-      amount: "",
-      date: "",
-      category: "",
-      type: "expense",
-      note: "račun skeniran",
-      confidence: 0,
-    };
-    state.warnings = { amountUncertain: false, titleUncertain: false };
-    updateReceiptFields();
-  }
-
-  function updateReceiptFields() {
-    const today = new Date().toISOString().slice(0, 10);
-    elements.receiptType.value = state.ocrResult.type || "expense";
-    elements.receiptName.value = state.ocrResult.title || "";
-    elements.receiptAmount.value = state.ocrResult.amount || "";
-    elements.receiptDate.value = state.ocrResult.date || today;
-    elements.receiptCategory.value = state.ocrResult.category || "";
-    elements.receiptNote.value = state.ocrResult.note || "";
-
-    elements.receiptName.closest(".form-group").classList.toggle(
-      "is-uncertain",
-      state.warnings.titleUncertain
-    );
-    elements.receiptAmount.closest(".form-group").classList.toggle(
-      "is-uncertain",
-      state.warnings.amountUncertain
-    );
-
-    if (state.warnings.amountUncertain || state.warnings.titleUncertain) {
-      const messages = [];
-      if (state.warnings.amountUncertain) {
-        messages.push("Nismo sigurni u iznos. Molimo provjerite.");
-      }
-      if (state.warnings.titleUncertain) {
-        messages.push("Nismo sigurni u naziv trgovine. Molimo upišite točan naziv.");
-      }
-      elements.receiptWarning.textContent = messages.join(" ");
-      elements.receiptWarning.hidden = false;
-    } else {
-      elements.receiptWarning.hidden = true;
-    }
-  }
-
   function addTransaction(entry) {
     state.transactions.push(entry);
     saveTransactions(state.transactions);
     updateSummary();
     if (state.activeView === "history") {
       renderTable();
+    }
+    if (state.activeView === "report") {
+      renderStatement();
     }
   }
 
@@ -498,7 +387,12 @@
     state.transactions = state.transactions.filter((item) => item.id !== currentDeleteId);
     saveTransactions(state.transactions);
     updateSummary();
-    renderTable();
+    if (state.activeView === "history") {
+      renderTable();
+    }
+    if (state.activeView === "report") {
+      renderStatement();
+    }
     currentDeleteId = null;
   }
 
@@ -516,192 +410,123 @@
     if (state.activeView === "history") {
       renderTable();
     }
-  }
-
-  function handleCaptureClick() {
-    elements.captureInput.click();
-  }
-
-  function readFileAsDataURL(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function simulateOcr(textSample) {
-    const sample = textSample.toLowerCase();
-    let detected = {
-      title: "",
-      amount: "",
-      date: "",
-      category: "",
-      type: "expense",
-      note: "račun skeniran",
-      confidence: 0.65,
-    };
-
-    const vendor = VENDOR_HINTS.find((hint) => sample.includes(hint.keyword));
-    if (vendor) {
-      detected.title = vendor.title;
-      detected.category = vendor.category;
-      detected.type = vendor.type;
-      detected.confidence = 0.82;
-    }
-
-    const incomeMatch = INCOME_KEYWORDS.some((keyword) => sample.includes(keyword));
-    const expenseMatch = EXPENSE_KEYWORDS.some((keyword) => sample.includes(keyword));
-    if (incomeMatch && !expenseMatch) {
-      detected.type = "income";
-      detected.category = detected.category || "Plaća";
-      detected.confidence = Math.max(detected.confidence, 0.78);
-    }
-
-    const amountMatch = sample.match(/(\d+[\.,]\d{2})/);
-    if (amountMatch) {
-      detected.amount = amountMatch[1].replace(",", ".");
-      detected.confidence = Math.max(detected.confidence, 0.8);
-    }
-
-    const dateMatch = sample.match(/(\d{4}-\d{2}-\d{2})|(\d{2}[\.\/-]\d{2}[\.\/-]\d{4})/);
-    if (dateMatch) {
-      const raw = dateMatch[0];
-      if (raw.includes("-")) {
-        detected.date = raw;
-      } else {
-        const [day, month, year] = raw.split(/[\.\/-]/);
-        detected.date = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-      }
-    }
-
-    const warnings = {
-      amountUncertain: !detected.amount || detected.confidence < 0.75,
-      titleUncertain: !detected.title || detected.confidence < 0.75,
-    };
-
-    if (warnings.amountUncertain || warnings.titleUncertain) {
-      detected.confidence = Math.min(detected.confidence, 0.7);
-    }
-
-    return { detected, warnings };
-  }
-
-  async function handleCaptureChange(event) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      elements.captureBlock.hidden = true;
-      elements.receiptFeedback.textContent = "";
-
-      const imageUrl = await readFileAsDataURL(file);
-      elements.receiptImage.src = imageUrl;
-
-      const { detected, warnings } = simulateOcr(file.name);
-      state.ocrResult = detected;
-      state.warnings = warnings;
-      elements.receiptForm.hidden = false;
-      updateReceiptFields();
-
-      if (!state.settings.discardImages) {
-        elements.receiptNote.value = `${detected.note || ""} (slika sačuvana)`;
-      }
-    } catch (error) {
-      console.error("Greška pri očitanju slike", error);
-      elements.receiptFeedback.textContent =
-        "OCR nije uspio. Fokusirajte kameru i pokušajte ponovno.";
-      elements.captureBlock.hidden = false;
+    if (state.activeView === "report") {
+      renderStatement();
     }
   }
 
-  function handleReceiptSubmit(event) {
+  function handleStatementSubmit(event) {
     event.preventDefault();
+    const formData = new FormData(elements.statementForm);
+    state.profile = {
+      issuerName: formData.get("issuerName").trim() || "Financijski tracker",
+      issuerAddress: formData.get("issuerAddress").trim(),
+      issuerOib: formData.get("issuerOib").trim(),
+      recipientName: formData.get("recipientName").trim(),
+      recipientAddress: formData.get("recipientAddress").trim(),
+      place: formData.get("place").trim() || "Rovinj",
+    };
+    saveProfile(state.profile);
+    renderStatement();
+    elements.statementFeedback.textContent = "Podaci su spremljeni.";
+  }
 
-    const type = elements.receiptType.value;
-    const title = elements.receiptName.value.trim();
-    const amount = Number(elements.receiptAmount.value);
-    const date = elements.receiptDate.value;
-    const category = elements.receiptCategory.value.trim();
-    const note = elements.receiptNote.value.trim();
+  function renderStatement() {
+    const { issuerName, issuerAddress, issuerOib, recipientName, recipientAddress, place } =
+      state.profile;
+    const monthly = filterTransactionsByMonth(state.transactions, state.month)
+      .slice()
+      .sort((a, b) => (a.date > b.date ? 1 : -1));
 
-    if (!type || !title || !date || isNaN(amount)) {
-      elements.receiptFeedback.textContent =
-        "Molimo provjerite Tip, Naziv, Datum i Iznos prije spremanja.";
-      return;
+    const income = monthly
+      .filter((item) => item.type === "income")
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const expense = monthly
+      .filter((item) => item.type === "expense")
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const balance = income - expense;
+
+    elements.statementPreviewPeriod.textContent = state.month || "";
+
+    const issuerLines = [issuerName];
+    if (issuerAddress) issuerLines.push(issuerAddress);
+    if (issuerOib) issuerLines.push(`OIB: ${issuerOib}`);
+    elements.statementPreviewIssuer.innerHTML = issuerLines
+      .filter(Boolean)
+      .map((line) => `<div>${line}</div>`)
+      .join("");
+
+    const recipientLines = [recipientName || "", recipientAddress || ""]
+      .filter(Boolean)
+      .map((line) => `<div>${line}</div>`)
+      .join("");
+    elements.statementPreviewRecipient.innerHTML = recipientLines || "<div>________________</div>";
+
+    const incomeText = formatAmount(income).replace(/\u00a0/g, " ");
+    const expenseText = formatAmount(expense).replace(/\u00a0/g, " ");
+    const balanceText = formatAmount(balance).replace(/\u00a0/g, " ");
+
+    elements.statementSummaryIncome.textContent = incomeText;
+    elements.statementSummaryExpense.textContent = expenseText;
+    elements.statementSummaryBalance.textContent = balanceText;
+
+    elements.statementTableBody.innerHTML = "";
+    if (!monthly.length) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 5;
+      cell.textContent = "Nema stavki za odabrani mjesec.";
+      row.appendChild(cell);
+      elements.statementTableBody.appendChild(row);
+    } else {
+      monthly.forEach((item) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${item.date}</td>
+          <td>${item.type === "income" ? "Prihod" : "Trošak"}</td>
+          <td>${item.title}</td>
+          <td>${item.category || "-"}</td>
+          <td class="amount-column">${Number(item.amount || 0)
+            .toFixed(2)
+            .replace(".", ",")}</td>
+        `;
+        elements.statementTableBody.appendChild(row);
+      });
     }
 
-    const entry = {
-      id: crypto.randomUUID(),
-      type,
-      title,
-      category,
-      amount,
-      date,
-      note,
-    };
+    const today = new Date().toISOString().slice(0, 10);
+    elements.statementPlaceDate.textContent = `${place || "Rovinj"}, ${today}`;
+    elements.statementNote.textContent =
+      "Napomena: Iznosi su izraženi u eurima. Dokument je automatski generiran iz aplikacije Financijski tracker.";
 
-    addTransaction(entry);
-    elements.receiptFeedback.textContent = "Stavka je spremljena.";
-    resetReceiptForm();
-    setActiveView("home");
+    hydrateStatementForm();
   }
 
-  function handleSettingsSubmit(event) {
-    event.preventDefault();
-    const discardImages = elements.settingsDiscardImages.checked;
-    const categoriesText = elements.settingsCategories.value;
-    const categories = categoriesText
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    state.settings = {
-      discardImages,
-      categories: categories.length ? categories : [...DEFAULT_CATEGORIES],
-    };
-    elements.discardImages.checked = discardImages;
-    saveSettings(state.settings);
-    syncCategoryOptions();
-    elements.settingsFeedback.textContent = "Postavke su spremljene.";
+  function hydrateStatementForm() {
+    elements.statementIssuerName.value = state.profile.issuerName;
+    elements.statementIssuerAddress.value = state.profile.issuerAddress;
+    elements.statementIssuerOib.value = state.profile.issuerOib;
+    elements.statementRecipientName.value = state.profile.recipientName;
+    elements.statementRecipientAddress.value = state.profile.recipientAddress;
+    elements.statementPlace.value = state.profile.place;
   }
 
-  function handleDiscardToggle(event) {
-    state.settings.discardImages = event.target.checked;
-    elements.settingsDiscardImages.checked = state.settings.discardImages;
-    saveSettings(state.settings);
-  }
-
-  function handleSettingsDiscardToggle(event) {
-    state.settings.discardImages = event.target.checked;
-    elements.discardImages.checked = state.settings.discardImages;
-    saveSettings(state.settings);
-  }
-
-  function hydrateSettingsForm() {
-    elements.settingsDiscardImages.checked = state.settings.discardImages;
-    elements.settingsCategories.value = state.settings.categories.join(", ");
-    elements.discardImages.checked = state.settings.discardImages;
+  function handlePrintClick() {
+    window.print();
   }
 
   function restoreState() {
     state.transactions = loadTransactions();
-    state.settings = loadSettings();
+    state.profile = loadProfile();
     state.month = currentMonthString();
     elements.monthSelect.value = state.month;
     syncCategoryOptions();
-    hydrateSettingsForm();
     resetManualForm();
+    hydrateStatementForm();
     updateSummary();
   }
 
   function bindEvents() {
-    elements.menuToggle.addEventListener("click", openSidebar);
-    elements.menuClose.addEventListener("click", closeSidebar);
-
     elements.navButtons.forEach((button) => {
       button.addEventListener("click", () => setActiveView(button.dataset.view));
     });
@@ -712,15 +537,10 @@
       setTimeout(resetManualForm, 0);
     });
     elements.manualForm.addEventListener("input", captureManualState);
-    elements.captureButton.addEventListener("click", handleCaptureClick);
-    elements.captureInput.addEventListener("change", handleCaptureChange);
-    elements.receiptRetake.addEventListener("click", resetReceiptForm);
-    elements.receiptForm.addEventListener("submit", handleReceiptSubmit);
     elements.tableBody.addEventListener("click", handleDelete);
     elements.confirmDialog.addEventListener("close", handleDialogClose);
-    elements.discardImages.addEventListener("change", handleDiscardToggle);
-    elements.settingsForm.addEventListener("submit", handleSettingsSubmit);
-    elements.settingsDiscardImages.addEventListener("change", handleSettingsDiscardToggle);
+    elements.statementForm.addEventListener("submit", handleStatementSubmit);
+    elements.printButton.addEventListener("click", handlePrintClick);
   }
 
   document.addEventListener("DOMContentLoaded", () => {

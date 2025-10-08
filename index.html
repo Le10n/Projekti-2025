@@ -15,19 +15,14 @@
     <script src="app.js" defer></script>
   </head>
   <body>
-    <div class="app-shell">
+    <div class="layout">
       <aside class="sidebar" aria-label="Glavni izbornik">
-        <div class="sidebar-header">
-          <button id="menu-toggle" class="menu-toggle" aria-label="Otvori izbornik">
-            ☰
-          </button>
-          <div>
-            <h1>Financijski tracker</h1>
-            <p class="tagline">Vaša digitalna kućna bilježnica</p>
-          </div>
+        <div class="brand">
+          <h1>Financijski tracker</h1>
+          <p>Vaša digitalna kućna bilježnica</p>
         </div>
         <nav>
-          <button class="nav-button" data-view="home">
+          <button class="nav-button is-active" data-view="home">
             <span aria-hidden="true">🏠</span>
             <span>Početna</span>
           </button>
@@ -35,40 +30,34 @@
             <span aria-hidden="true">✍️</span>
             <span>Nova stavka</span>
           </button>
-          <button class="nav-button" data-view="camera">
-            <span aria-hidden="true">📷</span>
-            <span>Slikaj račun</span>
-          </button>
           <button class="nav-button" data-view="history">
             <span aria-hidden="true">📜</span>
             <span>Povijest</span>
           </button>
-          <button class="nav-button" data-view="settings">
-            <span aria-hidden="true">⚙️</span>
-            <span>Postavke</span>
+          <button class="nav-button" data-view="report">
+            <span aria-hidden="true">📄</span>
+            <span>Izvještaj</span>
           </button>
         </nav>
+        <p class="sidebar-hint">
+          Odaberite jednu radnju. Sve je uvijek na dohvat ruke i bez skrivenih izbornika.
+        </p>
       </aside>
 
-      <main class="main-content">
-        <header class="top-bar">
-          <button id="menu-close" class="menu-close" aria-label="Zatvori izbornik">
-            ✕
-          </button>
+      <main class="main" aria-live="polite">
+        <header class="toolbar">
           <div>
             <h2 id="view-title">Početna</h2>
-            <p id="view-description" class="view-description"></p>
+            <p id="view-description">Sažeci i pregled potrošnje za odabrani mjesec.</p>
           </div>
+          <label class="month-picker">
+            <span>Odaberite mjesec</span>
+            <input type="month" id="month-select" name="month-select" />
+          </label>
         </header>
 
         <section class="view" data-view="home">
-          <div class="home-controls">
-            <label class="month-picker">
-              <span>Odaberite mjesec</span>
-              <input type="month" id="month-select" name="month-select" />
-            </label>
-          </div>
-          <div class="summary" aria-label="Sažeci financija">
+          <section class="summary" aria-label="Sažeci financija">
             <article class="summary-card" aria-live="polite">
               <h3>Prihodi</h3>
               <p id="income-total" class="summary-value">€ 0,00</p>
@@ -81,12 +70,14 @@
               <h3>Saldo</h3>
               <p id="balance-total" class="summary-value">€ 0,00</p>
             </article>
-          </div>
+          </section>
           <section class="card chart-card" aria-label="Graf potrošnje">
             <header>
-              <h3>Pregled mjeseca</h3>
+              <h3>Pregled po kategorijama</h3>
             </header>
-            <p class="chart-hint">Prikažite na što odlazi najviše sredstava u odabranom mjesecu.</p>
+            <p class="chart-hint">
+              Prikažite na što odlazi najviše sredstava u odabranom mjesecu.
+            </p>
             <canvas id="category-chart" aria-label="Kružni graf po kategorijama"></canvas>
           </section>
         </section>
@@ -159,86 +150,6 @@
           </section>
         </section>
 
-        <section class="view" data-view="camera" hidden>
-          <section class="card form-card" aria-label="Slikaj račun">
-            <header>
-              <h3>Slikaj račun</h3>
-              <p>Uslikajte račun pa potvrdite podatke prije spremanja.</p>
-            </header>
-            <div class="capture-block" id="capture-block">
-              <button type="button" id="capture-button" class="primary-button capture-button">
-                Otvori kameru / galeriju
-              </button>
-              <p class="capture-help">
-                Slikajte na svjetlu. Držite mirno. Račun neka ispuni ekran.
-              </p>
-              <label class="toggle">
-                <input type="checkbox" id="discard-images" checked />
-                <span>Ne spremamo fotografije nakon očitanja</span>
-              </label>
-              <input
-                type="file"
-                id="capture-input"
-                accept="image/*"
-                capture="environment"
-                hidden
-              />
-            </div>
-
-            <form id="receipt-form" class="receipt-form" hidden novalidate>
-              <div class="receipt-layout">
-                <div class="receipt-preview">
-                  <img id="receipt-image" alt="Pregled računa" />
-                  <button type="button" id="receipt-retake" class="secondary-button">
-                    Ponovno slikaj
-                  </button>
-                </div>
-                <div class="receipt-fields">
-                  <p id="receipt-warning" class="feedback warning" role="alert" hidden></p>
-                  <div class="form-group">
-                    <label for="receipt-type">Tip <span aria-hidden="true">*</span></label>
-                    <select id="receipt-type" name="type">
-                      <option value="income">Prihod</option>
-                      <option value="expense">Trošak</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label for="receipt-name">Naziv trgovine <span aria-hidden="true">*</span></label>
-                    <input type="text" id="receipt-name" name="name" autocomplete="off" />
-                  </div>
-                  <div class="form-group">
-                    <label for="receipt-amount">Iznos (€) <span aria-hidden="true">*</span></label>
-                    <input
-                      type="number"
-                      id="receipt-amount"
-                      name="amount"
-                      min="0"
-                      step="0.01"
-                      inputmode="decimal"
-                    />
-                  </div>
-                  <div class="form-group">
-                    <label for="receipt-date">Datum <span aria-hidden="true">*</span></label>
-                    <input type="date" id="receipt-date" name="date" />
-                  </div>
-                  <div class="form-group">
-                    <label for="receipt-category">Kategorija</label>
-                    <input list="category-options" id="receipt-category" name="category" />
-                  </div>
-                  <div class="form-group full">
-                    <label for="receipt-note">Bilješka</label>
-                    <textarea id="receipt-note" name="note" rows="2" placeholder="račun skeniran"></textarea>
-                  </div>
-                </div>
-              </div>
-              <div class="form-actions">
-                <button type="submit" class="primary-button">Spremi</button>
-              </div>
-              <p id="receipt-feedback" class="feedback" role="alert"></p>
-            </form>
-          </section>
-        </section>
-
         <section class="view" data-view="history" hidden>
           <section class="card table-card" aria-label="Povijest transakcija">
             <header>
@@ -263,29 +174,108 @@
           </section>
         </section>
 
-        <section class="view" data-view="settings" hidden>
-          <section class="card settings-card" aria-label="Postavke">
+        <section class="view" data-view="report" hidden>
+          <section class="card form-card no-print" aria-label="Postavke mjesečnog izvatka">
             <header>
-              <h3>Postavke</h3>
+              <h3>Izvještaj</h3>
+              <p>Unesite podatke koji se prikazuju na izvatku.</p>
             </header>
-            <form id="settings-form">
-              <label class="toggle">
-                <input type="checkbox" id="settings-discard-images" checked />
-                <span>Ne spremaj fotografije nakon očitanja (preporučeno)</span>
-              </label>
-              <div class="form-group">
-                <label for="settings-categories">Predložene kategorije</label>
-                <textarea
-                  id="settings-categories"
-                  rows="4"
-                  placeholder="Unesite kategorije odvojene zarezom"
-                ></textarea>
+            <form id="statement-form" novalidate>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="statement-issuer-name">Izdavatelj</label>
+                  <input type="text" id="statement-issuer-name" name="issuerName" />
+                </div>
+                <div class="form-group">
+                  <label for="statement-issuer-address">Adresa izdavatelja</label>
+                  <input type="text" id="statement-issuer-address" name="issuerAddress" />
+                </div>
+                <div class="form-group">
+                  <label for="statement-issuer-oib">OIB izdavatelja</label>
+                  <input type="text" id="statement-issuer-oib" name="issuerOib" />
+                </div>
+                <div class="form-group">
+                  <label for="statement-recipient-name">Primatelj</label>
+                  <input type="text" id="statement-recipient-name" name="recipientName" />
+                </div>
+                <div class="form-group">
+                  <label for="statement-recipient-address">Adresa primatelja</label>
+                  <input type="text" id="statement-recipient-address" name="recipientAddress" />
+                </div>
+                <div class="form-group">
+                  <label for="statement-place">Mjesto izdavanja</label>
+                  <input type="text" id="statement-place" name="place" />
+                </div>
               </div>
               <div class="form-actions">
-                <button type="submit" class="primary-button">Spremi postavke</button>
+                <button type="submit" class="primary-button">Spremi podatke</button>
               </div>
-              <p id="settings-feedback" class="feedback" role="alert"></p>
+              <p id="statement-feedback" class="feedback" role="alert"></p>
             </form>
+          </section>
+
+          <button type="button" class="primary-button no-print" id="print-button">
+            Ispiši / PDF
+          </button>
+
+          <section class="statement" aria-label="Mjesečni izvadak">
+            <h2>MJESEČNI IZVADAK / RAČUN</h2>
+            <p><strong>Razdoblje:</strong> <span id="statement-period"></span></p>
+
+            <div class="statement-parties">
+              <div>
+                <h3>Izdavatelj</h3>
+                <div id="preview-issuer"></div>
+              </div>
+              <div>
+                <h3>Primatelj</h3>
+                <div id="preview-recipient"></div>
+              </div>
+            </div>
+
+            <table class="statement-summary">
+              <thead>
+                <tr>
+                  <th>Prihodi (€)</th>
+                  <th>Troškovi (€)</th>
+                  <th>Saldo (€)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td id="summary-income">€ 0,00</td>
+                  <td id="summary-expense">€ 0,00</td>
+                  <td id="summary-balance">€ 0,00</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h3>Stavke u razdoblju</h3>
+            <table class="statement-table">
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Tip</th>
+                  <th>Naziv</th>
+                  <th>Kategorija</th>
+                  <th>Iznos (€)</th>
+                </tr>
+              </thead>
+              <tbody id="statement-body"></tbody>
+            </table>
+
+            <p id="statement-note" class="statement-note"></p>
+
+            <div class="statement-footer">
+              <div>
+                <p><strong>Mjesto i datum izdavanja:</strong></p>
+                <p id="statement-place-date"></p>
+              </div>
+              <div class="signature">
+                <p><strong>Potpis:</strong></p>
+                <p>_________________________</p>
+              </div>
+            </div>
           </section>
         </section>
       </main>

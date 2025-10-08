@@ -1,0 +1,329 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --card-bg: #ffffff;
+  --text: #20233a;
+  --muted: #5f668a;
+  --primary: #1a73e8;
+  --primary-dark: #1153a5;
+  --danger: #d32f2f;
+  --border: #d8dcec;
+  --radius: 16px;
+  --shadow: 0 12px 28px rgba(32, 35, 58, 0.12);
+  font-family: "Source Sans 3", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+h1,
+ h2,
+ h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+main {
+  padding: 1.5rem clamp(1rem, 4vw, 3rem) 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 2rem clamp(1rem, 4vw, 3rem) 0;
+  background: var(--bg);
+}
+
+.title-group h1 {
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 700;
+}
+
+.subtitle {
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.month-picker {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.month-picker input[type="month"] {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+  min-width: 220px;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.summary-card {
+  background: linear-gradient(145deg, #ffffff, #f2f5ff);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.summary-card h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.summary-value {
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  font-weight: 700;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+}
+
+.card header h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+input,
+ select,
+ textarea {
+  font: inherit;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fdfdff;
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+ select:focus,
+ textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.2);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
+  font: inherit;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.primary-button {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 8px 20px rgba(26, 115, 232, 0.3);
+}
+
+.primary-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(26, 115, 232, 0.35);
+}
+
+.secondary-button {
+  background: #e9edfb;
+  color: var(--primary);
+}
+
+.secondary-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(26, 115, 232, 0.2);
+}
+
+.danger-button {
+  background: var(--danger);
+  color: white;
+}
+
+.danger-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(211, 47, 47, 0.35);
+}
+
+.feedback {
+  min-height: 1.5rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.feedback.error {
+  color: var(--danger);
+}
+
+.feedback.success {
+  color: #1b873f;
+}
+
+.charts-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.chart-wrapper {
+  background: linear-gradient(145deg, #ffffff, #f3f6ff);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.chart-wrapper h3 {
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+}
+
+.table-card table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+}
+
+.table-card thead {
+  background: #e5e9fb;
+  color: var(--text);
+}
+
+.table-card th,
+.table-card td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #ecf0ff;
+}
+
+.table-card tbody tr:hover {
+  background: #f6f7ff;
+}
+
+.amount-column,
+.amount-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.delete-button {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(211, 47, 47, 0.4);
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.delete-button:hover,
+.delete-button:focus {
+  background: rgba(211, 47, 47, 0.1);
+  outline: none;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+#confirm-dialog {
+  border: none;
+  border-radius: var(--radius);
+  padding: 1.5rem 2rem;
+  box-shadow: var(--shadow);
+}
+
+#confirm-dialog::backdrop {
+  background: rgba(32, 35, 58, 0.4);
+}
+
+#confirm-dialog menu {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    align-items: flex-start;
+  }
+
+  .month-picker input[type="month"] {
+    min-width: unset;
+  }
+
+  .form-actions {
+    width: 100%;
+  }
+
+  .primary-button,
+  .secondary-button {
+    flex: 1;
+    text-align: center;
+  }
+}

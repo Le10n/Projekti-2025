@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Financijski tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="title-group">
+        <h1>Financijski tracker</h1>
+        <p class="subtitle">
+          Vaša digitalna kućna bilježnica za praćenje prihoda i troškova.
+        </p>
+      </div>
+      <label class="month-picker">
+        <span>Odaberite mjesec</span>
+        <input type="month" id="month-select" name="month-select" />
+      </label>
+    </header>
+
+    <main>
+      <section class="summary" aria-label="Sažeci financija">
+        <article class="summary-card" aria-live="polite">
+          <h2>Prihodi</h2>
+          <p id="income-total" class="summary-value">€ 0,00</p>
+        </article>
+        <article class="summary-card" aria-live="polite">
+          <h2>Troškovi</h2>
+          <p id="expense-total" class="summary-value">€ 0,00</p>
+        </article>
+        <article class="summary-card" aria-live="polite">
+          <h2>Saldo</h2>
+          <p id="balance-total" class="summary-value">€ 0,00</p>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <section class="card form-card" aria-label="Nova transakcija">
+          <header>
+            <h2>Nova transakcija</h2>
+          </header>
+          <form id="transaction-form" novalidate>
+            <div class="form-group">
+              <label for="type">Tip <span aria-hidden="true">*</span></label>
+              <select id="type" name="type" required>
+                <option value="">Odaberite...</option>
+                <option value="income">Prihod</option>
+                <option value="expense">Trošak</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="name">Naziv <span aria-hidden="true">*</span></label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                autocomplete="off"
+                placeholder="npr. Mirovina"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="category">Kategorija <span aria-hidden="true">*</span></label>
+              <input
+                list="category-options"
+                id="category"
+                name="category"
+                placeholder="npr. Hrana"
+                required
+              />
+              <datalist id="category-options"></datalist>
+            </div>
+            <div class="form-group">
+              <label for="amount">Iznos (€) <span aria-hidden="true">*</span></label>
+              <input
+                type="number"
+                id="amount"
+                name="amount"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                placeholder="npr. 25.00"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="date">Datum <span aria-hidden="true">*</span></label>
+              <input type="date" id="date" name="date" required />
+            </div>
+            <div class="form-group">
+              <label for="note">Bilješka (opcionalno)</label>
+              <textarea
+                id="note"
+                name="note"
+                rows="2"
+                placeholder="Kratki opis"
+              ></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary-button">Spremi</button>
+              <button type="reset" class="secondary-button">Odustani</button>
+            </div>
+            <p id="form-feedback" class="feedback" role="alert" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="card charts-card" aria-label="Grafovi">
+          <header>
+            <h2>Grafovi</h2>
+          </header>
+          <div class="chart-wrapper">
+            <h3>Potrošnja po kategorijama</h3>
+            <canvas id="category-chart" aria-label="Kružni graf troškova"></canvas>
+          </div>
+          <div class="chart-wrapper">
+            <h3>Trend prihoda i troškova</h3>
+            <canvas id="trend-chart" aria-label="Linijski graf trendova"></canvas>
+          </div>
+        </section>
+      </section>
+
+      <section class="card table-card" aria-label="Tablica transakcija">
+        <header>
+          <h2>Transakcije</h2>
+        </header>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Datum</th>
+                <th scope="col">Tip</th>
+                <th scope="col">Naziv</th>
+                <th scope="col">Kategorija</th>
+                <th scope="col" class="amount-column">Iznos</th>
+                <th scope="col">Brisanje</th>
+              </tr>
+            </thead>
+            <tbody id="transaction-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="confirm-dialog">
+      <form method="dialog">
+        <p>Jeste li sigurni da želite obrisati ovu stavku?</p>
+        <menu>
+          <button value="cancel" class="secondary-button">Odustani</button>
+          <button value="confirm" class="danger-button">Obriši</button>
+        </menu>
+      </form>
+    </dialog>
+  </body>
+</html>

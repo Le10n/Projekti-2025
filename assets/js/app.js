@@ -21,10 +21,12 @@ const transactionsTitle = document.getElementById('transactions-title');
 const chartCanvas = document.getElementById('category-chart');
 const chartDescription = document.getElementById('chart-description');
 const chartEmptyMessage = document.getElementById('chart-empty');
+const chartToggleButtons = Array.from(document.querySelectorAll('.toggle-button[data-chart-type]'));
 
 let currentState = STATE.IDLE;
 let deleteTarget = null;
 let categoryChart;
+let activeChartType = 'expense';
 
 window.addEventListener('DOMContentLoaded', () => {
     initialiseMonthSelector();
@@ -44,6 +46,13 @@ window.addEventListener('DOMContentLoaded', () => {
     tableBody.addEventListener('click', handleDeleteClick);
 
     deleteDialog.addEventListener('close', handleDialogClose);
+
+    chartToggleButtons.forEach(button => {
+        button.addEventListener('click', handleChartToggleClick);
+        button.addEventListener('keydown', handleChartToggleKeydown);
+    });
+
+    setActiveChartType(activeChartType);
 });
 
 function initialiseMonthSelector() {
@@ -69,6 +78,45 @@ function handleFormReset() {
     feedbackEl.textContent = '';
     feedbackEl.classList.remove('success');
     transitionTo(STATE.IDLE);
+}
+
+function handleChartToggleClick(event) {
+    const button = event.currentTarget;
+    const chartType = button?.getAttribute('data-chart-type');
+    if (!chartType || chartType === activeChartType) {
+        return;
+    }
+    setActiveChartType(chartType);
+    renderAll();
+}
+
+function setActiveChartType(chartType) {
+    activeChartType = chartType;
+    chartToggleButtons.forEach(button => {
+        const isActive = button.getAttribute('data-chart-type') === chartType;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-checked', String(isActive));
+        button.tabIndex = isActive ? 0 : -1;
+    });
+}
+
+function handleChartToggleKeydown(event) {
+    const key = event.key;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(key)) {
+        return;
+    }
+    event.preventDefault();
+    const currentIndex = chartToggleButtons.indexOf(event.currentTarget);
+    if (currentIndex < 0) {
+        return;
+    }
+    const isForward = key === 'ArrowRight' || key === 'ArrowDown';
+    const nextIndex = (currentIndex + (isForward ? 1 : -1) + chartToggleButtons.length) % chartToggleButtons.length;
+    const nextButton = chartToggleButtons[nextIndex];
+    if (nextButton) {
+        nextButton.focus();
+        nextButton.click();
+    }
 }
 
 function handleFormSubmit(event) {
@@ -200,7 +248,7 @@ function renderAll() {
     renderSummary(transactions);
     updateTransactionsTitle(dateField.value);
     renderTable(transactions, dateField.value);
-    renderCategoryChart(data, monthKey);
+    renderCategoryChart(data, monthKey, activeChartType);
 }
 
 function updateTransactionsTitle(selectedDate) {
@@ -261,12 +309,13 @@ function renderTable(transactions, filterDate) {
     });
 }
 
-function renderCategoryChart(data, activeMonth) {
+function renderCategoryChart(data, activeMonth, chartType) {
     if (!chartCanvas) return;
 
     const monthTransactions = data[activeMonth] ?? [];
-    const expenseTotals = monthTransactions
-        .filter(transaction => transaction.type === 'expense')
+    const selectedType = chartType === 'income' ? 'income' : 'expense';
+    const totals = monthTransactions
+        .filter(transaction => transaction.type === selectedType)
         .reduce((accumulator, transaction) => {
             const category = transaction.category || 'Nerazvrstano';
             const amount = Number(transaction.amount || 0);
@@ -274,8 +323,8 @@ function renderCategoryChart(data, activeMonth) {
             return accumulator;
         }, new Map());
 
-    const labels = Array.from(expenseTotals.keys());
-    const values = Array.from(expenseTotals.values());
+    const labels = Array.from(totals.keys());
+    const values = Array.from(totals.values());
     const total = values.reduce((sum, value) => sum + value, 0);
 
     if (categoryChart) {
@@ -287,10 +336,18 @@ function renderCategoryChart(data, activeMonth) {
         chartCanvas.style.display = 'none';
         if (chartEmptyMessage) {
             chartEmptyMessage.hidden = false;
+            chartEmptyMessage.textContent = selectedType === 'income'
+                ? 'Nema prihoda za odabrani mjesec.'
+                : 'Nema troškova za odabrani mjesec.';
         }
         if (chartDescription) {
-            chartDescription.textContent = 'Nema troškova za odabrani mjesec.';
+            chartDescription.textContent = selectedType === 'income'
+                ? 'Nema prihoda za odabrani mjesec.'
+                : 'Nema troškova za odabrani mjesec.';
         }
+        chartCanvas.setAttribute('aria-label', selectedType === 'income'
+            ? 'Graf prihoda po kategorijama (nema podataka)'
+            : 'Graf troškova po kategorijama (nema podataka)');
         return;
     }
 
@@ -299,8 +356,13 @@ function renderCategoryChart(data, activeMonth) {
         chartEmptyMessage.hidden = true;
     }
     if (chartDescription) {
-        chartDescription.textContent = 'Potrošnja po kategorijama u odabranom mjesecu';
+        chartDescription.textContent = selectedType === 'income'
+            ? 'Prihodi po kategorijama u odabranom mjesecu'
+            : 'Troškovi po kategorijama u odabranom mjesecu';
     }
+    chartCanvas.setAttribute('aria-label', selectedType === 'income'
+        ? 'Prihodi po kategorijama u odabranom mjesecu'
+        : 'Troškovi po kategorijama u odabranom mjesecu');
 
     const colors = generateCategoryColors(labels.length);
 
@@ -326,9 +388,12 @@ function renderCategoryChart(data, activeMonth) {
             },
             plugins: {
                 legend: {
-                    position: 'bottom',
+                    position: 'right',
+                    align: 'center',
                     labels: {
-                        boxWidth: 14,
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 12,
                         font: {
                             family: getComputedStyle(document.body).fontFamily,
                             size: 11

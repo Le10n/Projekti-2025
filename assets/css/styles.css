@@ -327,14 +327,20 @@ textarea:focus {
 .chart-area {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
     min-height: 0;
+    padding: 0.5rem 0.25rem 0.75rem;
+    text-align: center;
 }
 
 .chart-area canvas {
     width: 100%;
-    height: 180px;
+    max-width: 240px;
+    height: 210px;
     display: block;
+    margin: 0 auto;
 }
 
 .chart-description {

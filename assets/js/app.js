@@ -384,20 +384,28 @@ function renderCategoryChart(data, activeMonth, chartType) {
             responsive: true,
             maintainAspectRatio: false,
             layout: {
-                padding: 8
+                padding: {
+                    top: 4,
+                    right: 4,
+                    bottom: 4,
+                    left: 4
+                }
             },
             plugins: {
                 legend: {
-                    position: 'right',
+                    position: 'bottom',
                     align: 'center',
                     labels: {
-                        boxWidth: 12,
-                        boxHeight: 12,
-                        padding: 12,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        boxWidth: 10,
+                        boxHeight: 10,
+                        padding: 10,
                         font: {
                             family: getComputedStyle(document.body).fontFamily,
                             size: 11
-                        }
+                        },
+                        color: getComputedStyle(document.body).getPropertyValue('--color-text-light')?.trim() || '#52606d'
                     }
                 },
                 tooltip: {
@@ -411,7 +419,7 @@ function renderCategoryChart(data, activeMonth, chartType) {
                     }
                 }
             },
-            cutout: '58%'
+            cutout: '60%'
         }
     });
 }

@@ -16,10 +16,11 @@ const deleteDialog = document.getElementById('delete-dialog');
 const summaryIncome = document.getElementById('summary-income');
 const summaryExpense = document.getElementById('summary-expense');
 const summaryBalance = document.getElementById('summary-balance');
+const dateField = document.getElementById('date');
+const transactionsTitle = document.getElementById('transactions-title');
 
 let currentState = STATE.IDLE;
 let deleteTarget = null;
-let categoryChart;
 let trendChart;
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -35,6 +36,7 @@ window.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', handleFormSubmit);
     resetButton.addEventListener('click', handleFormReset);
     monthInput.addEventListener('change', handleMonthChange);
+    dateField.addEventListener('change', handleDateFilterChange);
 
     tableBody.addEventListener('click', handleDeleteClick);
 
@@ -45,13 +47,16 @@ function initialiseMonthSelector() {
     const today = new Date();
     const currentMonth = formatMonth(today);
     monthInput.value = currentMonth;
-    const dateField = document.getElementById('date');
     dateField.value = formatDate(today);
 }
 
 function handleMonthChange() {
     transitionTo(STATE.IDLE);
     syncDateWithSelectedMonth();
+    renderAll();
+}
+
+function handleDateFilterChange() {
     renderAll();
 }
 
@@ -190,8 +195,18 @@ function renderAll() {
     });
 
     renderSummary(transactions);
-    renderTable(transactions);
-    renderCharts(data, monthKey);
+    updateTransactionsTitle(dateField.value);
+    renderTable(transactions, dateField.value);
+    renderTrendChart(data, monthKey);
+}
+
+function updateTransactionsTitle(selectedDate) {
+    if (!transactionsTitle) return;
+    if (selectedDate) {
+        transactionsTitle.textContent = `Povijesti transakcija za ${formatDisplayDate(selectedDate)}`;
+    } else {
+        transactionsTitle.textContent = 'Povijesti transakcija za taj dan';
+    }
 }
 
 function renderSummary(transactions) {
@@ -209,21 +224,25 @@ function renderSummary(transactions) {
     summaryBalance.classList.toggle('negative', balance < 0);
 }
 
-function renderTable(transactions) {
+function renderTable(transactions, filterDate) {
     tableBody.innerHTML = '';
 
-    if (transactions.length === 0) {
+    const filteredTransactions = filterDate
+        ? transactions.filter(transaction => transaction.date === filterDate)
+        : transactions;
+
+    if (filteredTransactions.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
         cell.colSpan = 6;
         cell.className = 'empty-state';
-        cell.textContent = 'Nema zapisa za odabrani mjesec.';
+        cell.textContent = 'Nema zapisa za odabrani dan.';
         row.appendChild(cell);
         tableBody.appendChild(row);
         return;
     }
 
-    transactions.forEach(transaction => {
+    filteredTransactions.forEach(transaction => {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${formatDisplayDate(transaction.date)}</td>
@@ -236,59 +255,6 @@ function renderTable(transactions) {
             </td>
         `;
         tableBody.appendChild(row);
-    });
-}
-
-function renderCharts(data, activeMonth) {
-    const monthTransactions = data[activeMonth] ?? [];
-    renderCategoryChart(monthTransactions);
-    renderTrendChart(data, activeMonth);
-}
-
-function renderCategoryChart(transactions) {
-    const expenseTransactions = transactions.filter(t => t.type === 'expense');
-    const grouped = expenseTransactions.reduce((acc, item) => {
-        const amount = Number(item.amount || 0);
-        acc[item.category] = (acc[item.category] ?? 0) + amount;
-        return acc;
-    }, {});
-
-    const labels = Object.keys(grouped);
-    const values = Object.values(grouped);
-
-    if (categoryChart) {
-        categoryChart.destroy();
-    }
-
-    const ctx = document.getElementById('category-chart');
-    categoryChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels,
-            datasets: [{
-                data: values,
-                backgroundColor: generatePalette(values.length),
-                borderWidth: 1
-            }]
-        },
-        options: {
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        font: {
-                            family: getComputedStyle(document.body).fontFamily,
-                            size: 14
-                        }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: context => `${context.label}: ${formatCurrency(context.parsed)}`
-                    }
-                }
-            }
-        }
     });
 }
 
@@ -349,7 +315,7 @@ function renderTrendChart(data, activeMonth) {
                     labels: {
                         font: {
                             family: getComputedStyle(document.body).fontFamily,
-                            size: 14
+                            size: 12
                         }
                     }
                 },
@@ -400,7 +366,6 @@ function syncDateWithSelectedMonth() {
     const [year, month] = selectedMonth.split('-').map(Number);
     if (!Number.isFinite(year) || !Number.isFinite(month)) return;
     const today = new Date();
-    const dateField = document.getElementById('date');
     const day = Math.min(today.getDate(), daysInMonth(month, year));
     dateField.value = formatDate(new Date(year, month - 1, day));
 }
@@ -448,21 +413,6 @@ function formatMonthLabel(monthKey) {
         return monthKey;
     }
     return date.toLocaleDateString('hr-HR', { month: 'short', year: 'numeric' });
-}
-
-function generatePalette(count) {
-    const baseColors = [
-        '#1e6f9f', '#047857', '#c0392b', '#9b59b6', '#f39c12', '#16a085', '#2c3e50', '#e67e22', '#7f8c8d', '#2980b9'
-    ];
-    if (count <= baseColors.length) {
-        return baseColors.slice(0, count);
-    }
-    const palette = [];
-    for (let i = 0; i < count; i += 1) {
-        const hue = Math.floor((360 / count) * i);
-        palette.push(`hsl(${hue}, 65%, 55%)`);
-    }
-    return palette;
 }
 
 function escapeHtml(str = '') {

@@ -94,24 +94,18 @@
 
         <section class="card" aria-labelledby="charts-title">
             <div class="card-header">
-                <h2 id="charts-title">Grafovi</h2>
+                <h2 id="charts-title">Linijski graf</h2>
             </div>
-            <div class="charts">
-                <div class="chart-wrapper">
-                    <h3>Kružni graf: troškovi po kategorijama</h3>
-                    <canvas id="category-chart" aria-label="Troškovi po kategorijama" role="img"></canvas>
-                </div>
-                <div class="chart-wrapper">
-                    <h3>Linijski graf: trend prihoda i troškova</h3>
-                    <canvas id="trend-chart" aria-label="Trend prihoda i troškova" role="img"></canvas>
-                </div>
+            <div class="chart-area">
+                <p class="chart-description">Trend prihoda i troškova kroz mjesece</p>
+                <canvas id="trend-chart" aria-label="Trend prihoda i troškova" role="img"></canvas>
             </div>
         </section>
     </main>
 
     <section class="card table-card" aria-labelledby="transactions-title">
         <div class="card-header">
-            <h2 id="transactions-title">Transakcije</h2>
+            <h2 id="transactions-title">Povijesti transakcija za taj dan</h2>
         </div>
         <div class="table-wrapper">
             <table>
@@ -127,7 +121,7 @@
                 </thead>
                 <tbody id="transaction-table-body">
                     <tr>
-                        <td colspan="6" class="empty-state">Nema zapisa za odabrani mjesec.</td>
+                        <td colspan="6" class="empty-state">Nema zapisa za odabrani dan.</td>
                     </tr>
                 </tbody>
             </table>

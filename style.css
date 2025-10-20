@@ -253,15 +253,11 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  cursor: default;
 }
 
-#chartEmpty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 18px;
+#categoryChart.is-hot {
+  cursor: pointer;
 }
 
 .history-head {

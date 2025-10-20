@@ -18,7 +18,6 @@
   };
   const chartModeExpenseBtn = document.getElementById('chartModeExpenses');
   const chartModeIncomeBtn = document.getElementById('chartModeIncomes');
-  const chartEmpty = document.getElementById('chartEmpty');
   const chartCanvas = document.getElementById('categoryChart');
   const chartCtx = chartCanvas.getContext('2d');
   let categoryChart = null;
@@ -141,6 +140,20 @@
     return fmtCurrency.format((cents ?? 0) / 100);
   }
 
+  function formatCurrencyHR(cents) {
+    return formatCurrency(cents);
+  }
+
+  const sum = values => (Array.isArray(values) ? values.reduce((acc, value) => acc + value, 0) : 0);
+
+  function toPercents(values) {
+    if (!Array.isArray(values) || values.length === 0) {
+      return [];
+    }
+    const total = sum(values);
+    return values.map(value => (total ? (value * 100) / total : 0));
+  }
+
   function normaliseCategory(value) {
     if (!value) return 'Nedefinirano';
     return value
@@ -225,27 +238,40 @@
 
   const baseLegendGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
 
-  function destroyCategoryChart() {
+  const CenterNoDataPlugin = {
+    id: 'centerNoData',
+    beforeDraw(chart, args, options) {
+      const values = chart.data?.datasets?.[0]?.data || [];
+      const total = values.reduce((acc, value) => acc + (+value || 0), 0);
+      if (total > 0) {
+        return;
+      }
+
+      const { ctx, chartArea } = chart;
+      const { left, right, top, bottom, width, height } = chartArea;
+      const message = options?.message || 'Nema podataka za odabrani mjesec i tip.';
+
+      ctx.save();
+      ctx.clearRect(left, top, width, height);
+      ctx.font = `600 ${Math.max(16, Math.min(28, width / 18))}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+      ctx.fillStyle = '#9aa3af';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(message, (left + right) / 2, (top + bottom) / 2, width * 0.9);
+      ctx.restore();
+    },
+  };
+
+  function renderCategoryChart(labels, valuesEuro, { title = 'Graf po kategorijama' } = {}) {
+    const cents = Array.isArray(valuesEuro)
+      ? valuesEuro.map(value => Math.round((+value || 0) * 100))
+      : [];
+    const total = sum(cents);
+    const percentages = toPercents(cents);
+
     if (categoryChart) {
       categoryChart.destroy();
       categoryChart = null;
-    }
-  }
-
-  function renderCategoryChart(labels, valuesEuro) {
-    const empty = !valuesEuro || valuesEuro.length === 0 || valuesEuro.every(value => value === 0);
-    if (empty) {
-      destroyCategoryChart();
-      chartCanvas.style.display = 'none';
-      chartEmpty.hidden = false;
-      return;
-    }
-
-    chartCanvas.style.display = 'block';
-    chartEmpty.hidden = true;
-
-    if (categoryChart) {
-      categoryChart.destroy();
     }
 
     const datasetColors = labels.map((_, index) => palette[index % palette.length]);
@@ -256,58 +282,71 @@
         labels,
         datasets: [
           {
-            label: 'Iznos',
-            data: valuesEuro,
+            data: cents,
             backgroundColor: datasetColors,
             borderWidth: 1,
+            hoverOffset: 8,
           },
         ],
       },
       options: {
+        parsing: false,
         responsive: true,
         maintainAspectRatio: false,
-        animation: false,
+        animation: {
+          duration: 450,
+          animateRotate: true,
+          animateScale: false,
+          easing: 'easeOutQuart',
+        },
         layout: { padding: 8 },
         plugins: {
+          title: {
+            display: true,
+            text: title,
+          },
+          tooltip: {
+            enabled: total > 0,
+            callbacks: {
+              label(context) {
+                const label = context.label || '';
+                const valueCents = context.parsed || 0;
+                const pct = total ? (valueCents / total) * 100 : 0;
+                return `${label}: ${formatCurrencyHR(valueCents)} (${pct.toFixed(1)}%)`;
+              },
+            },
+          },
           legend: {
-            position: 'bottom',
+            position: 'right',
             labels: {
               boxWidth: 16,
               generateLabels(chartInstance) {
-                const defaultLabels = baseLegendGenerator(chartInstance);
+                const defaults = baseLegendGenerator(chartInstance);
                 const dataset = chartInstance.data.datasets[0];
-                const total = Array.isArray(dataset?.data)
-                  ? dataset.data.reduce((acc, val) => acc + val, 0)
-                  : 0;
-                return defaultLabels.map(item => {
-                  const valueEuro = dataset?.data?.[item.index] ?? 0;
-                  const cents = Math.round(valueEuro * 100);
-                  const percentage = total ? ((valueEuro / total) * 100).toFixed(1) : '0.0';
+                return defaults.map(item => {
+                  const valueCents = dataset?.data?.[item.index] ?? 0;
+                  const pct = percentages[item.index] ?? 0;
                   const category = chartInstance.data.labels[item.index] ?? item.text;
                   return {
                     ...item,
-                    text: `${category} – ${formatCurrency(cents)} (${percentage}%)`,
+                    text: `${category} – ${formatCurrencyHR(valueCents)} (${pct.toFixed(1)}%)`,
                   };
                 });
               },
             },
           },
-          tooltip: {
-            callbacks: {
-              label(context) {
-                const valueEuro = context.parsed;
-                const cents = Math.round(valueEuro * 100);
-                const label = context.label || '';
-                const data = Array.isArray(context.dataset?.data) ? context.dataset.data : [];
-                const datasetTotal = data.reduce((acc, v) => acc + v, 0);
-                const percentage = datasetTotal ? ((valueEuro / datasetTotal) * 100).toFixed(1) : '0.0';
-                return `${label}: ${formatCurrency(cents)} (${percentage}%)`;
-              },
-            },
+          centerNoData: {
+            message: 'Nema podataka za odabrani mjesec i tip.',
           },
         },
+        onHover: (event, elements) => {
+          chartCanvas.classList.toggle('is-hot', elements.length > 0);
+        },
       },
+      plugins: [CenterNoDataPlugin],
     });
+
+    categoryChart.update();
   }
 
   const palette = [
@@ -329,7 +368,8 @@
     const groups = monthData.groups[type];
     const labels = Object.keys(groups);
     const valuesEuro = labels.map(label => groups[label] / 100);
-    renderCategoryChart(labels, valuesEuro);
+    const title = type === 'expense' ? 'Troškovi po kategorijama' : 'Prihodi po kategorijama';
+    renderCategoryChart(labels, valuesEuro, { title });
   }
 
   function renderHistoryDay() {

@@ -135,22 +135,12 @@ p {
     min-height: 0;
 }
 
-.column-left {
-    height: 100%;
-}
-
-.column-left .card {
-    flex: 1 1 auto;
-    min-height: 0;
-}
-
 .column-right {
     position: sticky;
     top: 1.25rem;
     align-self: flex-start;
-    height: calc(100vh - 2.5rem);
-    display: grid;
-    grid-template-rows: auto 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
 }
 
@@ -163,8 +153,7 @@ p {
 }
 
 .table-card {
-    overflow: hidden;
-    height: 100%;
+    overflow: visible;
 }
 
 .card {
@@ -177,6 +166,10 @@ p {
     flex-direction: column;
     gap: 0.75rem;
     min-height: 0;
+}
+
+.page-shell > .table-card {
+    grid-column: 1 / -1;
 }
 
 .card-header {
@@ -359,8 +352,8 @@ textarea:focus {
 
 .table-wrapper {
     overflow-x: auto;
-    overflow-y: auto;
-    height: 100%;
+    overflow-y: visible;
+    height: auto;
 }
 
 @media (max-width: 1024px) {
@@ -380,11 +373,6 @@ textarea:focus {
         height: auto;
         display: flex;
         flex-direction: column;
-    }
-
-    .table-card {
-        height: auto;
-        max-height: clamp(260px, 60vh, 460px);
     }
 
     .table-wrapper {

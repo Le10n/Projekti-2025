@@ -165,6 +165,7 @@ p {
 .table-card {
     flex: 1 1 auto;
     overflow: hidden;
+    max-height: clamp(260px, 48vh, 420px);
 }
 
 .card {
@@ -355,6 +356,7 @@ textarea:focus {
     overflow-x: auto;
     overflow-y: auto;
     flex: 1 1 auto;
+    max-height: calc(100% - 2.5rem);
 }
 
 @media (max-width: 1024px) {
@@ -480,6 +482,10 @@ dialog::backdrop {
 
     .chart-card {
         position: static;
+    }
+
+    .table-card {
+        max-height: none;
     }
 
     .table-wrapper {

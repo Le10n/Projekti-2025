@@ -39,7 +39,6 @@ const state = {
   chartMode: 'expense',
   categoryChart: null,
   trendChart: null,
-  locked: false,
   editingId: null
 };
 
@@ -149,6 +148,81 @@ function ensureDefaultAccount(settings) {
 
 function applyDarkMode(enabled) {
   document.documentElement.classList.toggle('dark', Boolean(enabled));
+}
+
+async function sha256(text) {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function setPIN(newPin) {
+  const normalized = newPin.trim();
+  state.settings.pinHash = await sha256(normalized);
+  saveSettings(state.settings);
+  alert('PIN postavljen!');
+}
+
+function clearPIN() {
+  state.settings.pinHash = '';
+  saveSettings(state.settings);
+  alert('PIN uklonjen.');
+}
+
+async function verifyPIN(pinInput) {
+  if (!state.settings.pinHash) return true;
+  const entered = await sha256(pinInput.trim());
+  return entered === state.settings.pinHash;
+}
+
+async function requirePINOnStartup() {
+  if (!state.settings.pinHash) return;
+  const modal = document.getElementById('pinModal');
+  const input = document.getElementById('pinInput');
+  const confirmBtn = document.getElementById('pinConfirm');
+  const cancelBtn = document.getElementById('pinCancel');
+  const title = document.getElementById('pinTitle');
+  if (!modal || !input || !confirmBtn || !cancelBtn || !title) return;
+
+  title.textContent = 'Unesi PIN za otključavanje';
+  cancelBtn.style.display = '';
+  openModal('#pinModal');
+  input.value = '';
+  input.focus();
+
+  await new Promise(resolve => {
+    const cleanup = () => {
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      input.onkeydown = null;
+    };
+    const attemptUnlock = async () => {
+      const ok = await verifyPIN(input.value);
+      if (ok) {
+        cleanup();
+        closeModal('#pinModal');
+        input.value = '';
+        resolve(true);
+      } else {
+        alert('Pogrešan PIN!');
+        input.select();
+      }
+    };
+    confirmBtn.onclick = attemptUnlock;
+    input.onkeydown = event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        attemptUnlock();
+      }
+    };
+    cancelBtn.onclick = () => {
+      cleanup();
+      alert('Aplikacija zaključana. Osvježi da pokušaš ponovno.');
+      location.reload();
+    };
+  });
 }
 
 function showToast(message, type = 'info') {
@@ -810,6 +884,7 @@ function addSplitRow(containerId, category = '', amount = '') {
 function openModal(selector) {
   const modal = document.querySelector(selector);
   if (!modal) return;
+  modal.hidden = false;
   modal.style.display = 'flex';
   document.body.classList.add('modal-open');
 }
@@ -818,12 +893,14 @@ function closeModal(selector) {
   const modal = document.querySelector(selector);
   if (!modal) return;
   modal.style.display = 'none';
+  modal.hidden = true;
   document.body.classList.remove('modal-open');
 }
 
 function openDrawer(selector) {
   const drawer = document.querySelector(selector);
   if (!drawer) return;
+  drawer.hidden = false;
   drawer.style.display = 'flex';
   document.body.classList.add('modal-open');
 }
@@ -832,6 +909,7 @@ function closeDrawer(selector) {
   const drawer = document.querySelector(selector);
   if (!drawer) return;
   drawer.style.display = 'none';
+  drawer.hidden = true;
   document.body.classList.remove('modal-open');
 }
 
@@ -1284,71 +1362,6 @@ function updateFiltersForm() {
   document.getElementById('filtersAffectChart').checked = Boolean(filters.affectChart);
 }
 
-async function sha256(text) {
-  const enc = new TextEncoder().encode(text);
-  const buffer = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function handlePinSubmit(event) {
-  event.preventDefault();
-  const pin = document.getElementById('pinInput').value;
-  const confirmPin = document.getElementById('pinConfirm').value;
-  if (!pin || pin !== confirmPin) {
-    showToast('PIN i potvrda moraju biti isti.', 'danger');
-    return;
-  }
-  state.settings.pinHash = await sha256(pin);
-  saveSettings(state.settings);
-  showToast('PIN postavljen', 'success');
-  closeModal('#pinModal');
-  document.getElementById('pinInput').value = '';
-  document.getElementById('pinConfirm').value = '';
-}
-
-function handleClearPin() {
-  state.settings.pinHash = '';
-  saveSettings(state.settings);
-  showToast('PIN uklonjen', 'info');
-  closeModal('#pinModal');
-}
-
-async function handlePinUnlock(event) {
-  event.preventDefault();
-  const pin = document.getElementById('pinUnlock').value;
-  const hash = await sha256(pin);
-  if (hash === state.settings.pinHash) {
-    closeModal('#pinLock');
-    state.locked = false;
-    document.getElementById('pinUnlock').value = '';
-    renderAfterUnlock();
-  } else {
-    setError('pinUnlock', 'Netočan PIN.');
-  }
-}
-
-function renderAfterUnlock() {
-  renderAccountsSelects();
-  updateFiltersForm();
-  updateMenus();
-  renderKPIs();
-  renderCategoryChart();
-  renderHistoryDay();
-  renderBudgets();
-  renderRecurringList();
-  renderGoals();
-  renderAccountsList();
-}
-
-function maybeLockWithPIN() {
-  if (!state.settings.pinHash) {
-    renderAfterUnlock();
-    return;
-  }
-  state.locked = true;
-  openModal('#pinLock');
-}
-
 function updateMenus() {
   document.getElementById('toggleDark').checked = Boolean(state.settings.darkMode);
   document.getElementById('backupToggle').checked = Boolean(state.settings.weeklyBackup);
@@ -1409,7 +1422,19 @@ async function importAccount(file) {
     filters: { ...state.settings.filters, ...(payload.settings?.filters || {}) }
   };
   saveSettings(state.settings);
-  renderAfterUnlock();
+  applyDarkMode(state.settings.darkMode);
+  renderAccountsSelects();
+  updateMenus();
+  updateFiltersForm();
+  renderBudgets();
+  renderRecurringList();
+  renderGoals();
+  renderAccountsList();
+  renderKPIs();
+  renderCategoryChart();
+  syncHistoryDateForMonth();
+  renderHistoryDay();
+  warnIfBudgetHit();
   showToast('Uvoz dovršen', 'success');
 }
 
@@ -1456,78 +1481,98 @@ function exportMonthCSV(yyyyMm) {
 }
 
 function exportMonthPDF(yyyyMm) {
-  const txs = filterByMonth(state.transactions, yyyyMm);
-  const monthLabel = new Date(yyyyMm + '-01').toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
-  const sumIncomes = sumByType(txs, 'income');
-  const sumExpenses = sumByType(txs, 'expense');
-  const balance = sumIncomes - sumExpenses;
-  const categories = Array.from(groupByCategory(txs, 'expense').entries())
-    .map(([cat, cents]) => `<tr><td>${cat}</td><td>${formatCurrencyHR(cents)}</td></tr>`)
-    .join('');
-  const top5 = Array.from(groupByCategory(txs, 'expense').entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([cat, cents]) => `<li>${cat}: ${formatCurrencyHR(cents)}</li>`)
-    .join('');
-  const txRows = txs
-    .map(tx => `
-      <tr>
-        <td>${tx.date}</td>
-        <td>${tx.type}</td>
-        <td>${tx.title}</td>
-        <td>${normalizeCategory(tx.category)}</td>
-        <td>${formatCurrencyHR(tx.amountCents)}</td>
-      </tr>
-    `)
-    .join('');
-  const html = `
-    <html>
-      <head>
-        <title>Izvještaj ${monthLabel}</title>
-        <style>
-          body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding: 24px; }
-          h1, h2 { margin-bottom: 8px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          th, td { border: 1px solid #94a3b8; padding: 6px 8px; font-size: 13px; }
-          ul { margin-top: 8px; }
-        </style>
-      </head>
-      <body>
-        <h1>Financijski izvještaj – ${monthLabel}</h1>
-        <section>
-          <h2>Sažetak</h2>
-          <p>Prihodi: ${formatCurrencyHR(sumIncomes)}</p>
-          <p>Troškovi: ${formatCurrencyHR(sumExpenses)}</p>
-          <p>Saldo: ${formatCurrencyHR(balance)}</p>
-        </section>
-        <section>
-          <h2>Troškovi po kategorijama</h2>
-          <table>
-            <thead><tr><th>Kategorija</th><th>Iznos</th></tr></thead>
-            <tbody>${categories}</tbody>
-          </table>
-          <h3>Top 5 kategorija</h3>
-          <ul>${top5 || '<li>Nema podataka</li>'}</ul>
-        </section>
-        <section>
-          <h2>Popis transakcija</h2>
-          <table>
-            <thead><tr><th>Datum</th><th>Tip</th><th>Naziv</th><th>Kategorija</th><th>Iznos</th></tr></thead>
-            <tbody>${txRows}</tbody>
-          </table>
-        </section>
-      </body>
-    </html>
-  `;
-  const win = window.open('', '_blank');
-  if (!win) {
-    alert('Omogući pop-up prozore za PDF.');
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF) {
+    alert('PDF biblioteka nije dostupna.');
     return;
   }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  win.print();
+
+  const txs = filterByMonth(state.transactions, yyyyMm);
+  const incomes = sumByType(txs, 'income') / 100;
+  const expenses = sumByType(txs, 'expense') / 100;
+  const balance = incomes - expenses;
+  const monthLabel = new Date(`${yyyyMm}-01`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const margin = 15;
+  const lineHeight = 7;
+  let y = margin;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(`Financijski izvještaj — ${monthLabel}`, 105, y, { align: 'center' });
+  y += 12;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  doc.text(`Datum generiranja: ${new Date().toLocaleDateString('hr-HR')}`, margin, y);
+  y += 10;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sažetak', margin, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Ukupni prihodi:  ${incomes.toFixed(2)} €`, margin, y); y += lineHeight;
+  doc.text(`Ukupni troškovi: ${expenses.toFixed(2)} €`, margin, y); y += lineHeight;
+  doc.text(`Saldo:           ${balance.toFixed(2)} €`, margin, y); y += lineHeight + 5;
+
+  const expenseEntries = Object.entries(groupByCategory(txs, 'expense'))
+    .map(([category, cents]) => ({ category, value: (cents || 0) / 100 }))
+    .sort((a, b) => b.value - a.value);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Troškovi po kategorijama', margin, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  if (expenseEntries.length === 0) {
+    doc.text('Nema troškova za odabrani mjesec.', margin, y);
+    y += lineHeight;
+  } else {
+    doc.text('Kategorija', margin, y);
+    doc.text('Iznos (€)', 195 - margin, y, { align: 'right' });
+    y += lineHeight;
+    doc.setDrawColor(148, 163, 184);
+    doc.line(margin, y - 4, 195 - margin, y - 4);
+    expenseEntries.forEach(entry => {
+      if (y > 270) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(entry.category, margin, y);
+      doc.text(entry.value.toFixed(2), 195 - margin, y, { align: 'right' });
+      y += lineHeight;
+    });
+    y += 4;
+  }
+
+  const topFive = expenseEntries.slice(0, 5);
+  doc.setFont('helvetica', 'bold');
+  if (y > 270) {
+    doc.addPage();
+    y = margin;
+  }
+  doc.text('Top 5 troškova', margin, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  if (topFive.length === 0) {
+    doc.text('Nema troškova za prikaz.', margin, y);
+    y += lineHeight;
+  } else {
+    topFive.forEach((entry, index) => {
+      if (y > 270) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(`${index + 1}. ${entry.category}: ${entry.value.toFixed(2)} €`, margin, y);
+      y += lineHeight;
+    });
+  }
+
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text('Generirano u Financijskom trackeru — © Leon Sošić 2025', 105, 285, { align: 'center' });
+
+  doc.save(`Financijski_izvjestaj_${yyyyMm}.pdf`);
 }
 let typeFocusBound = false;
 function setupTypeFocus() {
@@ -1548,7 +1593,6 @@ function focusTitleField() {
 
 function setupKeyboardShortcuts() {
   document.addEventListener('keydown', event => {
-    if (state.locked) return;
     if (event.key === 'Escape') {
       closeModal('#editTxModal');
       closeModal('#budgetsModal');
@@ -1560,10 +1604,12 @@ function setupKeyboardShortcuts() {
       closeModal('#shortcutsModal');
       closeModal('#aboutModal');
       closeDrawer('#filterDrawer');
-      document.getElementById('accountMenu').hidden = true;
-      document.getElementById('moreMenu').hidden = true;
-      document.getElementById('moreMenuBtn').setAttribute('aria-expanded', 'false');
-      document.getElementById('accountMenuBtn').setAttribute('aria-expanded', 'false');
+      const accountMenu = document.getElementById('accountMenu');
+      const moreMenu = document.getElementById('moreMenu');
+      if (accountMenu) accountMenu.hidden = true;
+      if (moreMenu) moreMenu.hidden = true;
+      document.getElementById('moreMenuBtn')?.setAttribute('aria-expanded', 'false');
+      document.getElementById('accountMenuBtn')?.setAttribute('aria-expanded', 'false');
       return;
     }
     if (event.ctrlKey && event.key.toLowerCase() === 'n') {
@@ -1586,67 +1632,127 @@ function setupKeyboardShortcuts() {
 }
 
 function setupMenus() {
-  const accountBtn = document.getElementById('accountMenuBtn');
-  const accountMenu = document.getElementById('accountMenu');
-  accountBtn.addEventListener('click', event => {
-    const open = accountMenu.hidden;
-    accountMenu.hidden = !open;
-    accountBtn.setAttribute('aria-expanded', String(open));
-    event.stopPropagation();
-  });
+  const configs = [
+    { btnSelector: '#accountMenuBtn', menuSelector: '#accountMenu' },
+    { btnSelector: '#moreMenuBtn', menuSelector: '#moreMenu' }
+  ];
 
-  const moreBtn = document.getElementById('moreMenuBtn');
-  const moreMenu = document.getElementById('moreMenu');
-  moreBtn.addEventListener('click', event => {
-    const open = moreMenu.hidden;
-    moreMenu.hidden = !open;
-    moreBtn.setAttribute('aria-expanded', String(open));
-    event.stopPropagation();
+  const entries = configs
+    .map(({ btnSelector, menuSelector }) => ({
+      btn: document.querySelector(btnSelector),
+      menu: document.querySelector(menuSelector)
+    }))
+    .filter(entry => entry.btn && entry.menu);
+
+  const hideMenu = entry => {
+    entry.menu.hidden = true;
+    entry.btn.setAttribute('aria-expanded', 'false');
+  };
+
+  entries.forEach(entry => {
+    hideMenu(entry);
+    entry.btn.addEventListener('click', event => {
+      event.stopPropagation();
+      const willOpen = entry.menu.hidden;
+      entries.forEach(other => {
+        if (other !== entry) hideMenu(other);
+      });
+      entry.menu.hidden = !willOpen;
+      entry.btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
   });
 
   document.addEventListener('click', event => {
-    if (!accountMenu.hidden && !accountMenu.contains(event.target) && event.target !== accountBtn) {
-      accountMenu.hidden = true;
-      accountBtn.setAttribute('aria-expanded', 'false');
-    }
-    if (!moreMenu.hidden && !moreMenu.contains(event.target) && event.target !== moreBtn) {
-      moreMenu.hidden = true;
-      moreBtn.setAttribute('aria-expanded', 'false');
+    entries.forEach(entry => {
+      if (!entry.menu.hidden && !entry.menu.contains(event.target) && event.target !== entry.btn) {
+        hideMenu(entry);
+      }
+    });
+  });
+
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      entries.forEach(hideMenu);
     }
   });
 
-  document.getElementById('btnExport').addEventListener('click', () => { accountMenu.hidden = true; exportAccount(); });
-  document.getElementById('btnImport').addEventListener('click', () => {
+  const accountBtn = document.getElementById('accountMenuBtn');
+  const moreBtn = document.getElementById('moreMenuBtn');
+  const accountMenu = document.getElementById('accountMenu');
+  const moreMenu = document.getElementById('moreMenu');
+
+  const closeAccountMenu = () => {
+    if (!accountMenu) return;
     accountMenu.hidden = true;
-    document.getElementById('importFile').click();
+    accountBtn?.setAttribute('aria-expanded', 'false');
+  };
+  const closeMoreMenu = () => {
+    if (!moreMenu) return;
+    moreMenu.hidden = true;
+    moreBtn?.setAttribute('aria-expanded', 'false');
+  };
+
+  document.getElementById('btnExport')?.addEventListener('click', () => {
+    closeAccountMenu();
+    exportAccount();
   });
-  document.getElementById('importFile').addEventListener('change', event => {
+  document.getElementById('btnImport')?.addEventListener('click', () => {
+    closeAccountMenu();
+    document.getElementById('importFile')?.click();
+  });
+  document.getElementById('importFile')?.addEventListener('change', event => {
     const file = event.target.files?.[0];
     if (file) importAccount(file);
     event.target.value = '';
   });
 
-  document.getElementById('openFilterDrawer').addEventListener('click', () => { moreMenu.hidden = true; openDrawer('#filterDrawer'); });
-  document.getElementById('btnExportCSV').addEventListener('click', () => { moreMenu.hidden = true; exportMonthCSV(state.selectedMonth); });
-  document.getElementById('btnExportPDF').addEventListener('click', () => { moreMenu.hidden = true; exportMonthPDF(state.selectedMonth); });
-  document.getElementById('backupToggle').addEventListener('change', event => {
+  const withMoreMenuClose = callback => () => {
+    closeMoreMenu();
+    const result = callback();
+    if (result && typeof result.then === 'function') {
+      result.catch(err => console.error(err));
+    }
+  };
+
+  document.getElementById('openFilterDrawer')?.addEventListener('click', withMoreMenuClose(() => openDrawer('#filterDrawer')));
+  document.getElementById('btnExportCSV')?.addEventListener('click', withMoreMenuClose(() => exportMonthCSV(state.selectedMonth)));
+  document.getElementById('btnExportPDF')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDF(state.selectedMonth)));
+  document.getElementById('backupToggle')?.addEventListener('change', event => {
     state.settings.weeklyBackup = event.target.checked;
     saveSettings(state.settings);
-    moreMenu.hidden = true;
+    closeMoreMenu();
   });
-  document.getElementById('openBudgets').addEventListener('click', () => { moreMenu.hidden = true; openModal('#budgetsModal'); });
-  document.getElementById('openRecurring').addEventListener('click', () => { moreMenu.hidden = true; openModal('#recurringModal'); });
-  document.getElementById('openGoals').addEventListener('click', () => { moreMenu.hidden = true; openModal('#goalsModal'); });
-  document.getElementById('openAccounts').addEventListener('click', () => { moreMenu.hidden = true; openModal('#accountsModal'); });
-  document.getElementById('openTransfer').addEventListener('click', () => { moreMenu.hidden = true; openModal('#transferModal'); });
-  document.getElementById('toggleDark').addEventListener('change', event => {
+  document.getElementById('openBudgets')?.addEventListener('click', withMoreMenuClose(() => openModal('#budgetsModal')));
+  document.getElementById('openRecurring')?.addEventListener('click', withMoreMenuClose(() => openModal('#recurringModal')));
+  document.getElementById('openGoals')?.addEventListener('click', withMoreMenuClose(() => openModal('#goalsModal')));
+  document.getElementById('openAccounts')?.addEventListener('click', withMoreMenuClose(() => openModal('#accountsModal')));
+  document.getElementById('openTransfer')?.addEventListener('click', withMoreMenuClose(() => openModal('#transferModal')));
+  document.getElementById('toggleDark')?.addEventListener('change', event => {
     state.settings.darkMode = event.target.checked;
     applyDarkMode(state.settings.darkMode);
     saveSettings(state.settings);
   });
-  document.getElementById('setupPIN').addEventListener('click', () => { moreMenu.hidden = true; openModal('#pinModal'); });
-  document.getElementById('openShortcuts').addEventListener('click', () => { moreMenu.hidden = true; openModal('#shortcutsModal'); });
-  document.getElementById('openAbout').addEventListener('click', () => { moreMenu.hidden = true; openModal('#aboutModal'); });
+  document.getElementById('setupPIN')?.addEventListener('click', withMoreMenuClose(async () => {
+    const newPin = prompt('Unesi novi PIN (može sadržavati slova i brojke):');
+    if (!newPin) return;
+    const trimmed = newPin.trim();
+    if (trimmed.length < 4) {
+      alert('PIN mora imati barem 4 znaka.');
+      return;
+    }
+    await setPIN(trimmed);
+  }));
+  document.getElementById('removePIN')?.addEventListener('click', withMoreMenuClose(() => {
+    if (!state.settings.pinHash) {
+      alert('PIN nije postavljen.');
+      return;
+    }
+    if (confirm('Želiš li sigurno ukloniti PIN zaštitu?')) {
+      clearPIN();
+    }
+  }));
+  document.getElementById('openShortcuts')?.addEventListener('click', withMoreMenuClose(() => openModal('#shortcutsModal')));
+  document.getElementById('openAbout')?.addEventListener('click', withMoreMenuClose(() => openModal('#aboutModal')));
 }
 
 function bindUI() {
@@ -1703,9 +1809,6 @@ function bindUI() {
   document.getElementById('goalForm').addEventListener('submit', handleGoalSubmit);
   document.getElementById('accountForm').addEventListener('submit', handleAccountSubmit);
   document.getElementById('transferForm').addEventListener('submit', handleTransferSubmit);
-  document.getElementById('pinForm').addEventListener('submit', handlePinSubmit);
-  document.getElementById('clearPin').addEventListener('click', handleClearPin);
-  document.getElementById('pinUnlockForm').addEventListener('submit', handlePinUnlock);
 }
 
 function switchChartMode(mode) {
@@ -1739,12 +1842,14 @@ function syncHistoryDateForMonth() {
   setHistoryDate(candidate);
 }
 
-function initApp() {
+async function initApp() {
   ensureAccountId();
   state.transactions = loadTransactions();
   state.settings = loadSettings();
   ensureDefaultAccount(state.settings);
   applyDarkMode(state.settings.darkMode);
+
+  await requirePINOnStartup();
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const month = state.settings.lastMonth || currentMonth;
@@ -1753,6 +1858,7 @@ function initApp() {
 
   renderAccountsSelects();
   setupMenus();
+  updateMenus();
   bindUI();
   setupKeyboardShortcuts();
   setupTypeFocus();
@@ -1774,8 +1880,11 @@ function initApp() {
   renderAccountsList();
 
   syncHistoryDateForMonth();
+  renderKPIs();
+  renderCategoryChart();
+  renderHistoryDay();
   maybeOfferWeeklyBackup();
-  maybeLockWithPIN();
+  warnIfBudgetHit();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

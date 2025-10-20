@@ -6,6 +6,7 @@
   <title>Financijski tracker</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" defer></script>
   <script src="main.js" defer></script>
 </head>
 <body>
@@ -48,7 +49,8 @@
           <div class="group">
             <div class="group-title">Izgled i sigurnost</div>
             <label class="menu-switch" role="menuitem"><input type="checkbox" id="toggleDark"> Dark mode</label>
-            <button id="setupPIN" role="menuitem">Zaključaj PIN-om…</button>
+            <button id="setupPIN" role="menuitem">Postavi/Promijeni PIN</button>
+            <button id="removePIN" role="menuitem">Ukloni PIN</button>
             <button id="openShortcuts" role="menuitem">Tipkovničke kratice</button>
             <button id="openAbout" role="menuitem">O aplikaciji</button>
           </div>
@@ -476,24 +478,14 @@
     </div>
   </div>
 
-  <div id="pinModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+  <div id="pinModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle" hidden>
     <div class="dialog">
-      <header class="modal-head">
-        <h2 id="pinTitle">PIN zaštita</h2>
-        <button type="button" class="btn-close" data-close="#pinModal">✕</button>
-      </header>
-      <form id="pinForm" class="stacked-form">
-        <div class="field">
-          <label for="pinInput">Novi PIN (4-8 znamenki)</label>
-          <input id="pinInput" type="password" pattern="\\d{4,8}">
-        </div>
-        <div class="field">
-          <label for="pinConfirm">Potvrdi PIN</label>
-          <input id="pinConfirm" type="password" pattern="\\d{4,8}">
-        </div>
-        <button type="submit" class="btn btn-primary">Spremi PIN</button>
-        <button type="button" id="clearPin" class="btn btn-secondary">Ukloni PIN</button>
-      </form>
+      <h2 id="pinTitle">Unesi PIN za otključavanje</h2>
+      <input id="pinInput" type="password" placeholder="Unesi PIN" autocomplete="off">
+      <div class="actions">
+        <button id="pinConfirm" type="button" class="btn btn-primary">Potvrdi</button>
+        <button id="pinCancel" type="button" class="btn btn-secondary">Odustani</button>
+      </div>
     </div>
   </div>
 
@@ -526,18 +518,8 @@
     </div>
   </div>
 
-  <div id="pinLock" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinLockTitle">
-    <div class="dialog">
-      <h2 id="pinLockTitle">Unesite PIN</h2>
-      <form id="pinUnlockForm" class="stacked-form">
-        <div class="field">
-          <label for="pinUnlock">PIN</label>
-          <input id="pinUnlock" type="password" required pattern="\\d{4,8}">
-        </div>
-        <p class="error" data-error-for="pinUnlock"></p>
-        <button type="submit" class="btn btn-primary">Otključaj</button>
-      </form>
-    </div>
-  </div>
+  <footer id="pageFooter">
+    <p>napravljeno od strane <strong>Leona Sošića</strong> &copy; 2025</p>
+  </footer>
 </body>
 </html>

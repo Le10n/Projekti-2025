@@ -444,6 +444,14 @@ textarea {
   cursor: pointer;
 }
 
+#pageFooter {
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 20px 0 10px;
+  user-select: none;
+}
+
 .history {
   margin-top: 32px;
   background: var(--surface);

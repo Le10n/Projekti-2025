@@ -145,8 +145,8 @@ p {
 }
 
 .column-right {
-    display: grid;
-    grid-template-rows: auto 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
 }
 
@@ -155,7 +155,11 @@ p {
 }
 
 .chart-card {
+    position: sticky;
+    top: 1.25rem;
+    align-self: flex-start;
     flex: 0 0 auto;
+    z-index: 2;
 }
 
 .table-card {
@@ -472,6 +476,10 @@ dialog::backdrop {
 
     .column {
         flex-direction: column;
+    }
+
+    .chart-card {
+        position: static;
     }
 
     .table-wrapper {

@@ -1,6 +1,12 @@
 (function () {
-  const STORAGE_KEY = 'fintracker.v1.transactions';
-  const SETTINGS_KEY = 'fintracker.v1.settings';
+  const LS_KEYS = {
+    accountId: 'fintracker.v1.accountId',
+    txs: 'fintracker.v1.transactions',
+    settings: 'fintracker.v1.settings',
+  };
+
+  const STORAGE_KEY = LS_KEYS.txs;
+  const SETTINGS_KEY = LS_KEYS.settings;
 
   const monthPicker = document.getElementById('monthPicker');
   const sumIncomesEl = document.getElementById('sumIncomes');
@@ -21,6 +27,11 @@
   const chartCanvas = document.getElementById('categoryChart');
   const chartCtx = chartCanvas.getContext('2d');
   let categoryChart = null;
+  const accountMenuBtn = document.getElementById('accountMenuBtn');
+  const accountMenu = document.getElementById('accountMenu');
+  const btnImport = document.getElementById('btnImport');
+  const btnExport = document.getElementById('btnExport');
+  const importFileInput = document.getElementById('importFile');
   const historyDateLabel = document.getElementById('historyDateLabel');
   const historyDateInput = document.getElementById('historyDate');
   const prevDayBtn = document.getElementById('prevDay');
@@ -29,8 +40,7 @@
   const timeHeader = document.querySelector('#txTable thead .time-col');
   const toast = document.getElementById('toast');
   const modal = document.getElementById('editTxModal');
-  const modalCloseBtn = modal.querySelector('.modal-close');
-  const modalDismissBtn = modal.querySelector('[data-modal-dismiss]');
+  const modalDismissBtn = document.getElementById('editCancel');
   const editForm = document.getElementById('editTxForm');
   const editFields = {
     type: document.getElementById('editTxType'),
@@ -58,6 +68,17 @@
     editingId: null,
     toastTimeout: null,
   };
+
+  function ensureAccountId() {
+    let id = window.localStorage.getItem(LS_KEYS.accountId);
+    if (!id) {
+      id = uuidv4();
+      window.localStorage.setItem(LS_KEYS.accountId, id);
+    }
+    return id;
+  }
+
+  const ACCOUNT_ID = ensureAccountId();
 
   function loadState() {
     try {
@@ -152,6 +173,83 @@
     }
     const total = sum(values);
     return values.map(value => (total ? (value * 100) / total : 0));
+  }
+
+  function nowISO() {
+    return new Date().toISOString();
+  }
+
+  function exportAccount() {
+    const payload = {
+      schema: 'fintracker.v1',
+      exportedAt: nowISO(),
+      accountId: ACCOUNT_ID,
+      transactions: state.transactions,
+      settings: state.settings,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    const timestamp = nowISO().slice(0, 19).replace(/[:T]/g, '-');
+    link.href = URL.createObjectURL(blob);
+    link.download = `fintracker-${payload.accountId}-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  }
+
+  function mergeTransactions(existing, incoming) {
+    const map = new Map(existing.map(item => [item.id, item]));
+    incoming.forEach(tx => {
+      if (!tx || typeof tx !== 'object' || !tx.id) return;
+      const current = map.get(tx.id);
+      if (!current) {
+        map.set(tx.id, tx);
+        return;
+      }
+      const currentTime = Date.parse(current.updatedAt || current.createdAt || 0);
+      const incomingTime = Date.parse(tx.updatedAt || tx.createdAt || 0);
+      if (incomingTime > currentTime) {
+        map.set(tx.id, tx);
+      }
+    });
+    return Array.from(map.values());
+  }
+
+  async function importAccount(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (!payload || payload.schema !== 'fintracker.v1' || !Array.isArray(payload.transactions)) {
+        window.alert('Nepoznat format uvoza.');
+        return;
+      }
+
+      const merged = mergeTransactions(loadState(), payload.transactions);
+      saveState(merged);
+
+      const incomingSettings = payload.settings && typeof payload.settings === 'object' ? payload.settings : {};
+      const localSettings = loadSettings();
+      const mergedSettings = { ...incomingSettings, ...localSettings };
+      saveSettings(mergedSettings);
+
+      state.transactions = merged;
+      state.settings = { ...state.settings, ...mergedSettings };
+      invalidateAll();
+      setHistoryDate(state.currentHistoryDate);
+      renderKPIs();
+      renderChart();
+      renderHistoryDay();
+
+      window.alert(
+        `Uvoz dovršen. Učitano transakcija: ${payload.transactions.length}. Ukupno u računu: ${merged.length}.`
+      );
+    } catch (error) {
+      console.error('Neuspješan uvoz', error);
+      window.alert('Neispravna datoteka.');
+    }
   }
 
   function normaliseCategory(value) {
@@ -614,7 +712,7 @@
 
   function openModal(tx) {
     state.editingId = tx.id;
-    modal.hidden = false;
+    modal.style.display = 'flex';
     modal.dataset.open = 'true';
     editFields.type.value = tx.type;
     editFields.title.value = tx.title;
@@ -628,13 +726,13 @@
     editFields.note.value = tx.note || '';
     clearErrors(editForm);
     editFields.title.focus();
-    document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
   }
 
   function closeModal() {
-    modal.hidden = true;
+    modal.style.display = 'none';
     delete modal.dataset.open;
-    document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
     state.editingId = null;
   }
 
@@ -707,9 +805,6 @@
   }
 
   function handleKeyShortcuts(event) {
-    if (event.target.closest('#editTxModal[hidden]')) {
-      return;
-    }
     if (event.key === 'Escape' && modal.dataset.open === 'true') {
       closeModal();
     }
@@ -772,7 +867,6 @@
 
   tableBody.addEventListener('click', handleTableClick);
 
-  modalCloseBtn.addEventListener('click', closeModal);
   modalDismissBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', event => {
     if (event.target === modal) {
@@ -789,6 +883,52 @@
     if (categoryChart) {
       categoryChart.resize();
     }
+  });
+
+  accountMenuBtn.addEventListener('click', event => {
+    const isHidden = accountMenu.hasAttribute('hidden');
+    if (isHidden) {
+      accountMenu.removeAttribute('hidden');
+      accountMenuBtn.setAttribute('aria-expanded', 'true');
+    } else {
+      accountMenu.setAttribute('hidden', '');
+      accountMenuBtn.setAttribute('aria-expanded', 'false');
+    }
+    event.stopPropagation();
+  });
+
+  document.addEventListener('click', event => {
+    if (!accountMenu.hasAttribute('hidden') && !accountMenu.contains(event.target) && event.target !== accountMenuBtn) {
+      accountMenu.setAttribute('hidden', '');
+      accountMenuBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !accountMenu.hasAttribute('hidden')) {
+      accountMenu.setAttribute('hidden', '');
+      accountMenuBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  btnExport.addEventListener('click', () => {
+    accountMenu.setAttribute('hidden', '');
+    accountMenuBtn.setAttribute('aria-expanded', 'false');
+    exportAccount();
+  });
+
+  btnImport.addEventListener('click', () => {
+    accountMenu.setAttribute('hidden', '');
+    accountMenuBtn.setAttribute('aria-expanded', 'false');
+    importFileInput.click();
+  });
+
+  importFileInput.addEventListener('change', event => {
+    const file = event.target.files?.[0];
+    if (file) {
+      importAccount(file);
+    }
+    importFileInput.value = '';
   });
 
   window.addEventListener('load', init);

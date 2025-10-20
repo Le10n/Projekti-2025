@@ -13,12 +13,23 @@
   <div id="mobileOverlay" role="alert">Otvori na računalu</div>
   <div class="app-shell">
     <header class="topbar">
-      <h1>Financijski tracker</h1>
+      <div class="topbar-left">
+        <button id="accountMenuBtn" class="icon-btn" aria-haspopup="menu" aria-expanded="false" title="Račun">
+          ☰
+        </button>
+        <h1>Financijski tracker</h1>
+        <div id="accountMenu" class="menu" role="menu" hidden>
+          <button id="btnImport" role="menuitem">Uvezi podatke…</button>
+          <button id="btnExport" role="menuitem">Izvezi podatke</button>
+        </div>
+      </div>
       <div class="month-picker">
         <label for="monthPicker">Odaberi mjesec</label>
         <input type="month" id="monthPicker">
       </div>
     </header>
+
+    <input type="file" id="importFile" accept="application/json" hidden>
 
     <section class="kpis" aria-label="Sažetak financija">
       <article id="card-incomes" class="kpi-card" tabindex="0" aria-live="polite">
@@ -128,12 +139,9 @@
 
   <div id="toast" role="status" aria-live="polite" hidden>Transakcija dodana</div>
 
-  <div id="editTxModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="editTxTitle">
-    <div class="modal-content">
-      <header class="modal-header">
-        <h2 id="editTxTitle">Uredi transakciju</h2>
-        <button type="button" class="modal-close" aria-label="Zatvori">×</button>
-      </header>
+  <div id="editTxModal" role="dialog" aria-modal="true" aria-labelledby="editTxTitle">
+    <div class="dialog">
+      <h2 id="editTxTitle">Uredi transakciju</h2>
       <form id="editTxForm" novalidate>
         <div class="field">
           <label for="editTxType">Tip transakcije</label>
@@ -172,8 +180,8 @@
           <textarea id="editTxNote" rows="3"></textarea>
         </div>
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Spremi</button>
-          <button type="button" class="btn btn-secondary" data-modal-dismiss>Odustani</button>
+          <button id="editSave" type="submit" class="btn btn-primary">Spremi</button>
+          <button id="editCancel" type="button" class="btn btn-secondary">Odustani</button>
         </div>
       </form>
     </div>

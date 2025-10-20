@@ -12,121 +12,126 @@
     <script src="assets/js/app.js" type="module" defer></script>
 </head>
 <body>
-    <header class="page-header">
-        <div>
-            <h1>Financijski tracker</h1>
-            <p class="tagline">Vaša digitalna kućna bilježnica za novac</p>
-        </div>
-        <label class="month-picker" for="month-select">
-            <span>Odaberi mjesec</span>
-            <input id="month-select" type="month" aria-label="Odaberi mjesec">
-        </label>
-    </header>
-
-    <section class="summary" aria-label="Mjesečni sažetak">
-        <article class="summary-card" aria-live="polite">
-            <h2>Prihodi</h2>
-            <p id="summary-income" class="summary-amount">€ 0,00</p>
-        </article>
-        <article class="summary-card" aria-live="polite">
-            <h2>Troškovi</h2>
-            <p id="summary-expense" class="summary-amount">€ 0,00</p>
-        </article>
-        <article class="summary-card" aria-live="polite">
-            <h2>Saldo</h2>
-            <p id="summary-balance" class="summary-amount">€ 0,00</p>
-        </article>
-    </section>
-
-    <main class="main-content">
-        <section class="card" aria-labelledby="new-transaction-title">
-            <div class="card-header">
-                <h2 id="new-transaction-title">Nova transakcija</h2>
+    <div class="page-shell">
+        <header class="page-header">
+            <div>
+                <h1>Financijski tracker</h1>
+                <p class="tagline">Vaša digitalna kućna bilježnica za novac</p>
             </div>
-            <form id="transaction-form" novalidate>
-                <div class="form-group">
-                    <label for="type">Tip<span aria-hidden="true">*</span></label>
-                    <select id="type" name="type" required>
-                        <option value="">-- Odaberite --</option>
-                        <option value="income">Prihod</option>
-                        <option value="expense">Trošak</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="name">Naziv<span aria-hidden="true">*</span></label>
-                    <input type="text" id="name" name="name" required placeholder="npr. Plaća">
-                </div>
-                <div class="form-group">
-                    <label for="category">Kategorija<span aria-hidden="true">*</span></label>
-                    <input list="category-options" id="category" name="category" required placeholder="npr. Hrana">
-                    <datalist id="category-options">
-                        <option value="Mirovina"></option>
-                        <option value="Plaća"></option>
-                        <option value="Režije"></option>
-                        <option value="Hrana"></option>
-                        <option value="Lijekovi"></option>
-                        <option value="Prijevoz"></option>
-                        <option value="Darovi"></option>
-                        <option value="Auto"></option>
-                        <option value="Zabava"></option>
-                        <option value="Ostalo"></option>
-                    </datalist>
-                </div>
-                <div class="form-group">
-                    <label for="amount">Iznos (€)<span aria-hidden="true">*</span></label>
-                    <input type="number" id="amount" name="amount" inputmode="decimal" step="0.01" min="0" required placeholder="npr. 25,00">
-                </div>
-                <div class="form-group">
-                    <label for="date">Datum<span aria-hidden="true">*</span></label>
-                    <input type="date" id="date" name="date" required>
-                </div>
-                <div class="form-group">
-                    <label for="note">Bilješka</label>
-                    <textarea id="note" name="note" rows="2" placeholder="Opcionalno"></textarea>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" class="btn primary">Spremi</button>
-                    <button type="button" class="btn secondary" id="reset-form">Odustani</button>
-                </div>
-                <p id="form-feedback" role="alert" class="form-feedback" aria-live="assertive"></p>
-            </form>
+            <label class="month-picker" for="month-select">
+                <span>Odaberi mjesec</span>
+                <input id="month-select" type="month" aria-label="Odaberi mjesec">
+            </label>
+        </header>
+
+        <section class="summary" aria-label="Mjesečni sažetak">
+            <article class="summary-card" aria-live="polite">
+                <h2>Prihodi</h2>
+                <p id="summary-income" class="summary-amount">€ 0,00</p>
+            </article>
+            <article class="summary-card" aria-live="polite">
+                <h2>Troškovi</h2>
+                <p id="summary-expense" class="summary-amount">€ 0,00</p>
+            </article>
+            <article class="summary-card" aria-live="polite">
+                <h2>Saldo</h2>
+                <p id="summary-balance" class="summary-amount">€ 0,00</p>
+            </article>
         </section>
 
-        <section class="card" aria-labelledby="charts-title">
-            <div class="card-header">
-                <h2 id="charts-title">Linijski graf</h2>
+        <main class="main-layout">
+            <div class="column column-left">
+                <section class="card" aria-labelledby="new-transaction-title">
+                    <div class="card-header">
+                        <h2 id="new-transaction-title">Nova transakcija</h2>
+                    </div>
+                    <form id="transaction-form" novalidate>
+                        <div class="form-group">
+                            <label for="type">Tip<span aria-hidden="true">*</span></label>
+                            <select id="type" name="type" required>
+                                <option value="">-- Odaberite --</option>
+                                <option value="income">Prihod</option>
+                                <option value="expense">Trošak</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="name">Naziv<span aria-hidden="true">*</span></label>
+                            <input type="text" id="name" name="name" required placeholder="npr. Plaća">
+                        </div>
+                        <div class="form-group">
+                            <label for="category">Kategorija<span aria-hidden="true">*</span></label>
+                            <input list="category-options" id="category" name="category" required placeholder="npr. Hrana">
+                            <datalist id="category-options">
+                                <option value="Mirovina"></option>
+                                <option value="Plaća"></option>
+                                <option value="Režije"></option>
+                                <option value="Hrana"></option>
+                                <option value="Lijekovi"></option>
+                                <option value="Prijevoz"></option>
+                                <option value="Darovi"></option>
+                                <option value="Auto"></option>
+                                <option value="Zabava"></option>
+                                <option value="Ostalo"></option>
+                            </datalist>
+                        </div>
+                        <div class="form-group">
+                            <label for="amount">Iznos (€)<span aria-hidden="true">*</span></label>
+                            <input type="number" id="amount" name="amount" inputmode="decimal" step="0.01" min="0" required placeholder="npr. 25,00">
+                        </div>
+                        <div class="form-group">
+                            <label for="date">Datum<span aria-hidden="true">*</span></label>
+                            <input type="date" id="date" name="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="note">Bilješka</label>
+                            <textarea id="note" name="note" rows="2" placeholder="Opcionalno"></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn primary">Spremi</button>
+                            <button type="button" class="btn secondary" id="reset-form">Odustani</button>
+                        </div>
+                        <p id="form-feedback" role="alert" class="form-feedback" aria-live="assertive"></p>
+                    </form>
+                </section>
             </div>
-            <div class="chart-area">
-                <p class="chart-description">Trend prihoda i troškova kroz mjesece</p>
-                <canvas id="trend-chart" aria-label="Trend prihoda i troškova" role="img"></canvas>
-            </div>
-        </section>
-    </main>
+            <div class="column column-right">
+                <section class="card chart-card" aria-labelledby="charts-title">
+                    <div class="card-header">
+                        <h2 id="charts-title">Linijski graf</h2>
+                    </div>
+                    <div class="chart-area">
+                        <p class="chart-description">Trend prihoda i troškova kroz mjesece</p>
+                        <canvas id="trend-chart" aria-label="Trend prihoda i troškova" role="img"></canvas>
+                    </div>
+                </section>
 
-    <section class="card table-card" aria-labelledby="transactions-title">
-        <div class="card-header">
-            <h2 id="transactions-title">Povijesti transakcija za taj dan</h2>
-        </div>
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th scope="col">Datum</th>
-                        <th scope="col">Tip</th>
-                        <th scope="col">Naziv</th>
-                        <th scope="col">Kategorija</th>
-                        <th scope="col" class="align-right">Iznos (€)</th>
-                        <th scope="col" class="actions-column">Brisanje</th>
-                    </tr>
-                </thead>
-                <tbody id="transaction-table-body">
-                    <tr>
-                        <td colspan="6" class="empty-state">Nema zapisa za odabrani dan.</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
+                <section class="card table-card" aria-labelledby="transactions-title">
+                    <div class="card-header">
+                        <h2 id="transactions-title">Povijest transakcija za taj dan</h2>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Datum</th>
+                                    <th scope="col">Tip</th>
+                                    <th scope="col">Naziv</th>
+                                    <th scope="col">Kategorija</th>
+                                    <th scope="col" class="align-right">Iznos (€)</th>
+                                    <th scope="col" class="actions-column">Brisanje</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transaction-table-body">
+                                <tr>
+                                    <td colspan="6" class="empty-state">Nema zapisa za odabrani dan.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
 
     <dialog id="delete-dialog" aria-modal="true">
         <form method="dialog" class="dialog-content">

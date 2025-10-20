@@ -203,9 +203,9 @@ function renderAll() {
 function updateTransactionsTitle(selectedDate) {
     if (!transactionsTitle) return;
     if (selectedDate) {
-        transactionsTitle.textContent = `Povijesti transakcija za ${formatDisplayDate(selectedDate)}`;
+        transactionsTitle.textContent = `Povijest transakcija za ${formatDisplayDate(selectedDate)}`;
     } else {
-        transactionsTitle.textContent = 'Povijesti transakcija za taj dan';
+        transactionsTitle.textContent = 'Povijest transakcija za taj dan';
     }
 }
 
@@ -302,10 +302,43 @@ function renderTrendChart(data, activeMonth) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: 8
+            },
+            elements: {
+                line: {
+                    borderWidth: 2
+                },
+                point: {
+                    radius: 3,
+                    hoverRadius: 5
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'nearest'
+            },
             scales: {
                 y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(82, 96, 109, 0.12)'
+                    },
                     ticks: {
-                        callback: value => formatCurrency(Number(value))
+                        callback: value => formatCurrency(Number(value)),
+                        font: {
+                            size: 11
+                        }
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 11
+                        }
                     }
                 }
             },
@@ -315,7 +348,7 @@ function renderTrendChart(data, activeMonth) {
                     labels: {
                         font: {
                             family: getComputedStyle(document.body).fontFamily,
-                            size: 12
+                            size: 11
                         }
                     }
                 },

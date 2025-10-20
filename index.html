@@ -9,23 +9,50 @@
   <script src="main.js" defer></script>
 </head>
 <body>
-  <div id="desktopBanner" class="desktop-only">&nbsp;</div>
   <div id="mobileOverlay" role="alert">Otvori na računalu</div>
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-left">
-        <button id="accountMenuBtn" class="icon-btn" aria-haspopup="menu" aria-expanded="false" title="Račun">
-          ☰
-        </button>
-        <h1>Financijski tracker</h1>
+        <button id="accountMenuBtn" class="icon-btn" aria-haspopup="menu" aria-expanded="false" title="Račun">☰</button>
         <div id="accountMenu" class="menu" role="menu" hidden>
           <button id="btnImport" role="menuitem">Uvezi podatke…</button>
           <button id="btnExport" role="menuitem">Izvezi podatke</button>
         </div>
+        <h1>Financijski tracker</h1>
       </div>
-      <div class="month-picker">
-        <label for="monthPicker">Odaberi mjesec</label>
-        <input type="month" id="monthPicker">
+      <div class="topbar-right">
+        <div class="month-picker">
+          <label for="monthPicker">Odaberi mjesec</label>
+          <input type="month" id="monthPicker">
+        </div>
+        <button id="moreMenuBtn" class="icon-btn" aria-haspopup="menu" aria-expanded="false" title="Napredno">⚙️</button>
+        <div id="moreMenu" class="menu advanced-menu" role="menu" hidden>
+          <div class="group">
+            <div class="group-title">Podaci</div>
+            <button id="openFilterDrawer" role="menuitem">Filteri i pretraga…</button>
+            <button id="btnExportCSV" role="menuitem">CSV izvoz (mjesec)</button>
+            <button id="btnExportPDF" role="menuitem">PDF izvještaj (mjesec)</button>
+            <label class="menu-switch" role="menuitem"><input type="checkbox" id="backupToggle"> Automatski backup (tjedno)</label>
+          </div>
+          <div class="group">
+            <div class="group-title">Planiranje</div>
+            <button id="openBudgets" role="menuitem">Budžeti po kategorijama…</button>
+            <button id="openRecurring" role="menuitem">Ponavljajuće transakcije…</button>
+            <button id="openGoals" role="menuitem">Ciljevi i štednje…</button>
+          </div>
+          <div class="group">
+            <div class="group-title">Računi</div>
+            <button id="openAccounts" role="menuitem">Popis računa/novčanika…</button>
+            <button id="openTransfer" role="menuitem">Transfer između računa…</button>
+          </div>
+          <div class="group">
+            <div class="group-title">Izgled i sigurnost</div>
+            <label class="menu-switch" role="menuitem"><input type="checkbox" id="toggleDark"> Dark mode</label>
+            <button id="setupPIN" role="menuitem">Zaključaj PIN-om…</button>
+            <button id="openShortcuts" role="menuitem">Tipkovničke kratice</button>
+            <button id="openAbout" role="menuitem">O aplikaciji</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -73,6 +100,12 @@
           </div>
 
           <div class="field">
+            <label for="txAccount">Račun</label>
+            <select id="txAccount" required></select>
+            <p class="error" data-error-for="txAccount"></p>
+          </div>
+
+          <div class="field">
             <label for="txAmount">Iznos</label>
             <input id="txAmount" type="text" inputmode="decimal" placeholder="npr. 25,00" required>
             <p class="error" data-error-for="txAmount"></p>
@@ -85,8 +118,25 @@
           </div>
 
           <div class="field">
+            <label for="txTime">Vrijeme <span class="muted">(opcionalno)</span></label>
+            <input id="txTime" type="time">
+          </div>
+
+          <div class="field">
             <label for="txNote">Bilješka <span class="muted">(opcionalno)</span></label>
             <textarea id="txNote" placeholder="Opcionalno" rows="3"></textarea>
+          </div>
+
+          <div class="split-control">
+            <button id="btnSplit" type="button" class="btn btn-secondary">Razdijeli…</button>
+          </div>
+          <div id="splitEditor" hidden>
+            <div class="split-head">
+              <h3>Razdijeli po kategorijama</h3>
+              <button id="addSplitRow" type="button" class="btn btn-secondary">Dodaj kategoriju</button>
+            </div>
+            <div id="splitRows"></div>
+            <p class="error" data-error-for="splits"></p>
           </div>
 
           <div class="form-actions">
@@ -98,12 +148,18 @@
 
       <section class="chart-panel" aria-labelledby="chartHeading">
         <h2 id="chartHeading">Graf po kategorijama</h2>
-        <div class="chart-toggle" role="group" aria-label="Odabir tipa grafa">
-          <button id="chartModeExpenses" class="btn-toggle active" type="button">Troškovi</button>
-          <button id="chartModeIncomes" class="btn-toggle" type="button">Prihodi</button>
+        <div class="chart-toggle" role="tablist" aria-label="Odabir grafa">
+          <button id="chartModeExpenses" class="btn-toggle active" type="button" role="tab" aria-selected="true">Troškovi</button>
+          <button id="chartModeIncomes" class="btn-toggle" type="button" role="tab" aria-selected="false">Prihodi</button>
+          <button id="chartModeTrend" class="btn-toggle" type="button" role="tab" aria-selected="false">Trend</button>
         </div>
-        <div class="chart-canvas">
-          <canvas id="categoryChart" role="img" aria-label="Graf po kategorijama"></canvas>
+        <div class="chart-views">
+          <div class="chart-canvas" data-view="doughnut">
+            <canvas id="categoryChart" role="img" aria-label="Graf po kategorijama"></canvas>
+          </div>
+          <div class="chart-canvas" data-view="trend" hidden>
+            <canvas id="trendChart" role="img" aria-label="Trend prihoda i troškova"></canvas>
+          </div>
         </div>
       </section>
     </main>
@@ -124,14 +180,14 @@
               <th>Tip</th>
               <th>Naziv</th>
               <th>Kategorija</th>
+              <th>Račun</th>
               <th class="align-right">Iznos (EUR)</th>
               <th class="time-col">Vrijeme</th>
               <th>Bilješka</th>
               <th>Akcije</th>
             </tr>
           </thead>
-          <tbody>
-          </tbody>
+          <tbody></tbody>
         </table>
       </div>
     </section>
@@ -139,7 +195,7 @@
 
   <div id="toast" role="status" aria-live="polite" hidden>Transakcija dodana</div>
 
-  <div id="editTxModal" role="dialog" aria-modal="true" aria-labelledby="editTxTitle">
+  <div id="editTxModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="editTxTitle">
     <div class="dialog">
       <h2 id="editTxTitle">Uredi transakciju</h2>
       <form id="editTxForm" novalidate>
@@ -148,6 +204,7 @@
           <select id="editTxType" required>
             <option value="income">Prihod</option>
             <option value="expense">Trošak</option>
+            <option value="transfer">Transfer</option>
           </select>
           <p class="error" data-error-for="editTxType"></p>
         </div>
@@ -162,6 +219,11 @@
           <p class="error" data-error-for="editTxCategory"></p>
         </div>
         <div class="field">
+          <label for="editTxAccount">Račun</label>
+          <select id="editTxAccount" required></select>
+          <p class="error" data-error-for="editTxAccount"></p>
+        </div>
+        <div class="field">
           <label for="editTxAmount">Iznos</label>
           <input id="editTxAmount" type="text" inputmode="decimal" required>
           <p class="error" data-error-for="editTxAmount"></p>
@@ -172,17 +234,308 @@
           <p class="error" data-error-for="editTxDate"></p>
         </div>
         <div class="field">
-          <label for="editTxTime">Vrijeme <span class="muted">(opcionalno)</span></label>
+          <label for="editTxTime">Vrijeme</label>
           <input id="editTxTime" type="time">
         </div>
         <div class="field">
           <label for="editTxNote">Bilješka</label>
           <textarea id="editTxNote" rows="3"></textarea>
         </div>
+        <div class="split-control">
+          <button id="editSplitToggle" type="button" class="btn btn-secondary">Razdijeli…</button>
+        </div>
+        <div id="editSplitEditor" hidden>
+          <div class="split-head">
+            <h3>Razdijeli po kategorijama</h3>
+            <button id="editAddSplitRow" type="button" class="btn btn-secondary">Dodaj kategoriju</button>
+          </div>
+          <div id="editSplitRows"></div>
+          <p class="error" data-error-for="editSplits"></p>
+        </div>
         <div class="form-actions">
           <button id="editSave" type="submit" class="btn btn-primary">Spremi</button>
           <button id="editCancel" type="button" class="btn btn-secondary">Odustani</button>
         </div>
+      </form>
+    </div>
+  </div>
+
+  <aside id="filterDrawer" class="drawer" aria-labelledby="filterDrawerTitle" aria-modal="true" role="dialog">
+    <div class="drawer-content">
+      <header class="drawer-header">
+        <h2 id="filterDrawerTitle">Filteri i pretraga</h2>
+        <button type="button" class="btn-close" data-close="#filterDrawer">✕</button>
+      </header>
+      <form id="filtersForm">
+        <div class="field">
+          <label for="filterText">Traži</label>
+          <input id="filterText" type="text" placeholder="npr. kava">
+        </div>
+        <div class="field">
+          <label for="filterType">Tip</label>
+          <select id="filterType">
+            <option value="all">Sve</option>
+            <option value="income">Prihodi</option>
+            <option value="expense">Troškovi</option>
+            <option value="transfer">Transferi</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filterCategory">Kategorija</label>
+          <input id="filterCategory" type="text" placeholder="npr. Hrana">
+        </div>
+        <div class="field">
+          <label for="filterAccount">Račun</label>
+          <select id="filterAccount"></select>
+        </div>
+        <div class="field-group">
+          <div class="field">
+            <label for="filterDateFrom">Od datuma</label>
+            <input id="filterDateFrom" type="date">
+          </div>
+          <div class="field">
+            <label for="filterDateTo">Do datuma</label>
+            <input id="filterDateTo" type="date">
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field">
+            <label for="filterMin">Minimalni iznos (EUR)</label>
+            <input id="filterMin" type="number" step="0.01">
+          </div>
+          <div class="field">
+            <label for="filterMax">Maksimalni iznos (EUR)</label>
+            <input id="filterMax" type="number" step="0.01">
+          </div>
+        </div>
+        <div class="field">
+          <label for="filterSort">Sortiranje</label>
+          <select id="filterSort">
+            <option value="date-desc">Datum ↓</option>
+            <option value="date-asc">Datum ↑</option>
+            <option value="amount-desc">Iznos ↓</option>
+            <option value="amount-asc">Iznos ↑</option>
+          </select>
+        </div>
+        <label class="menu-switch affect-chart"><input type="checkbox" id="filtersAffectChart"> Primijeni i na graf</label>
+        <div class="drawer-actions">
+          <button type="submit" class="btn btn-primary">Primijeni</button>
+          <button type="button" id="clearFilters" class="btn btn-secondary">Očisti</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <div id="budgetsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="budgetsTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="budgetsTitle">Budžeti po kategorijama</h2>
+        <button type="button" class="btn-close" data-close="#budgetsModal">✕</button>
+      </header>
+      <div class="modal-body">
+        <div id="budgetsList" class="budget-list"></div>
+        <form id="budgetForm" class="inline-form">
+          <input id="budgetCategory" type="text" placeholder="Kategorija" required>
+          <input id="budgetAmount" type="number" step="0.01" placeholder="Limit (EUR)" required>
+          <button type="submit" class="btn btn-primary">Dodaj/Spremi</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="recurringModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="recurringTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="recurringTitle">Ponavljajuće transakcije</h2>
+        <button type="button" class="btn-close" data-close="#recurringModal">✕</button>
+      </header>
+      <div class="modal-body">
+        <div id="recurringList" class="recurring-list"></div>
+        <form id="recurringForm" class="stacked-form">
+          <div class="field-group">
+            <div class="field">
+              <label for="recurringType">Tip</label>
+              <select id="recurringType" required>
+                <option value="income">Prihod</option>
+                <option value="expense">Trošak</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="recurringDay">Dan u mjesecu</label>
+              <input id="recurringDay" type="number" min="1" max="31" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="recurringTitleInput">Naziv</label>
+            <input id="recurringTitleInput" type="text" required>
+          </div>
+          <div class="field">
+            <label for="recurringCategory">Kategorija</label>
+            <input id="recurringCategory" type="text" required>
+          </div>
+          <div class="field">
+            <label for="recurringAccount">Račun</label>
+            <select id="recurringAccount" required></select>
+          </div>
+          <div class="field">
+            <label for="recurringAmount">Iznos (EUR)</label>
+            <input id="recurringAmount" type="number" step="0.01" required>
+          </div>
+          <div class="field">
+            <label for="recurringNote">Bilješka</label>
+            <textarea id="recurringNote" rows="2"></textarea>
+          </div>
+          <label class="menu-switch"><input type="checkbox" id="recurringActive" checked> Aktivno</label>
+          <button type="submit" class="btn btn-primary">Spremi definiciju</button>
+        </form>
+        <button id="applyRecurringMonth" class="btn btn-secondary">Primijeni za ovaj mjesec</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="goalsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="goalsTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="goalsTitle">Ciljevi i štednje</h2>
+        <button type="button" class="btn-close" data-close="#goalsModal">✕</button>
+      </header>
+      <div class="modal-body">
+        <div id="goalsList" class="goals-list"></div>
+        <form id="goalForm" class="stacked-form">
+          <div class="field">
+            <label for="goalTitle">Naziv cilja</label>
+            <input id="goalTitle" type="text" required>
+          </div>
+          <div class="field">
+            <label for="goalTarget">Cilj (EUR)</label>
+            <input id="goalTarget" type="number" step="0.01" required>
+          </div>
+          <div class="field">
+            <label for="goalDeadline">Rok</label>
+            <input id="goalDeadline" type="date">
+          </div>
+          <button type="submit" class="btn btn-primary">Dodaj cilj</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="accountsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="accountsTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="accountsTitle">Računi i novčanici</h2>
+        <button type="button" class="btn-close" data-close="#accountsModal">✕</button>
+      </header>
+      <div class="modal-body">
+        <div id="accountsList" class="accounts-list"></div>
+        <form id="accountForm" class="stacked-form">
+          <div class="field">
+            <label for="accountName">Naziv</label>
+            <input id="accountName" type="text" required>
+          </div>
+          <div class="field">
+            <label for="accountCurrency">Valuta</label>
+            <input id="accountCurrency" type="text" value="EUR" required>
+          </div>
+          <label class="menu-switch"><input type="checkbox" id="accountHidden"> Sakrij račun</label>
+          <button type="submit" class="btn btn-primary">Spremi račun</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="transferModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="transferTitle">Transfer između računa</h2>
+        <button type="button" class="btn-close" data-close="#transferModal">✕</button>
+      </header>
+      <form id="transferForm" class="stacked-form">
+        <div class="field">
+          <label for="transferFrom">S računa</label>
+          <select id="transferFrom" required></select>
+        </div>
+        <div class="field">
+          <label for="transferTo">Na račun</label>
+          <select id="transferTo" required></select>
+        </div>
+        <div class="field">
+          <label for="transferAmount">Iznos (EUR)</label>
+          <input id="transferAmount" type="number" step="0.01" required>
+        </div>
+        <div class="field">
+          <label for="transferDate">Datum</label>
+          <input id="transferDate" type="date" required>
+        </div>
+        <div class="field">
+          <label for="transferNote">Bilješka</label>
+          <textarea id="transferNote" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Izvrši transfer</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="pinModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="pinTitle">PIN zaštita</h2>
+        <button type="button" class="btn-close" data-close="#pinModal">✕</button>
+      </header>
+      <form id="pinForm" class="stacked-form">
+        <div class="field">
+          <label for="pinInput">Novi PIN (4-8 znamenki)</label>
+          <input id="pinInput" type="password" pattern="\\d{4,8}">
+        </div>
+        <div class="field">
+          <label for="pinConfirm">Potvrdi PIN</label>
+          <input id="pinConfirm" type="password" pattern="\\d{4,8}">
+        </div>
+        <button type="submit" class="btn btn-primary">Spremi PIN</button>
+        <button type="button" id="clearPin" class="btn btn-secondary">Ukloni PIN</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="shortcutsModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="shortcutsTitle">Tipkovničke kratice</h2>
+        <button type="button" class="btn-close" data-close="#shortcutsModal">✕</button>
+      </header>
+      <ul class="shortcuts-list">
+        <li><kbd>Ctrl</kbd> + <kbd>N</kbd> – nova transakcija</li>
+        <li><kbd>Ctrl</kbd> + <kbd>S</kbd> – spremi transakciju</li>
+        <li><kbd>Ctrl</kbd> + <kbd>F</kbd> – filteri i pretraga</li>
+        <li><kbd>?</kbd> – popis kratica</li>
+        <li><kbd>Esc</kbd> – zatvori otvorene prozore</li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="aboutModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="aboutTitle">O aplikaciji</h2>
+        <button type="button" class="btn-close" data-close="#aboutModal">✕</button>
+      </header>
+      <div class="modal-body">
+        <p>Financijski tracker – shema podataka <strong>fintracker.v1</strong>. Podaci se čuvaju lokalno na ovom uređaju.</p>
+        <p>Napredne opcije dostupne su kroz izbornik ⚙️.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="pinLock" class="modal" role="dialog" aria-modal="true" aria-labelledby="pinLockTitle">
+    <div class="dialog">
+      <h2 id="pinLockTitle">Unesite PIN</h2>
+      <form id="pinUnlockForm" class="stacked-form">
+        <div class="field">
+          <label for="pinUnlock">PIN</label>
+          <input id="pinUnlock" type="password" required pattern="\\d{4,8}">
+        </div>
+        <p class="error" data-error-for="pinUnlock"></p>
+        <button type="submit" class="btn btn-primary">Otključaj</button>
       </form>
     </div>
   </div>

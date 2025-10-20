@@ -97,11 +97,12 @@
             <div class="column column-right">
                 <section class="card chart-card" aria-labelledby="charts-title">
                     <div class="card-header">
-                        <h2 id="charts-title">Linijski graf</h2>
+                        <h2 id="charts-title">Kružni graf</h2>
                     </div>
                     <div class="chart-area">
-                        <p class="chart-description">Trend prihoda i troškova kroz mjesece</p>
-                        <canvas id="trend-chart" aria-label="Trend prihoda i troškova" role="img"></canvas>
+                        <p id="chart-description" class="chart-description">Potrošnja po kategorijama u odabranom mjesecu</p>
+                        <canvas id="category-chart" aria-label="Potrošnja po kategorijama" role="img"></canvas>
+                        <p id="chart-empty" class="chart-empty" hidden>Nema troškova za odabrani mjesec.</p>
                     </div>
                 </section>
 

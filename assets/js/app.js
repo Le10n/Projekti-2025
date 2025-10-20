@@ -18,10 +18,13 @@ const summaryExpense = document.getElementById('summary-expense');
 const summaryBalance = document.getElementById('summary-balance');
 const dateField = document.getElementById('date');
 const transactionsTitle = document.getElementById('transactions-title');
+const chartCanvas = document.getElementById('category-chart');
+const chartDescription = document.getElementById('chart-description');
+const chartEmptyMessage = document.getElementById('chart-empty');
 
 let currentState = STATE.IDLE;
 let deleteTarget = null;
-let trendChart;
+let categoryChart;
 
 window.addEventListener('DOMContentLoaded', () => {
     initialiseMonthSelector();
@@ -197,7 +200,7 @@ function renderAll() {
     renderSummary(transactions);
     updateTransactionsTitle(dateField.value);
     renderTable(transactions, dateField.value);
-    renderTrendChart(data, monthKey);
+    renderCategoryChart(data, monthKey);
 }
 
 function updateTransactionsTitle(selectedDate) {
@@ -258,44 +261,60 @@ function renderTable(transactions, filterDate) {
     });
 }
 
-function renderTrendChart(data, activeMonth) {
-    const months = Array.from(new Set([...Object.keys(data), activeMonth].filter(Boolean))).sort();
-    if (months.length === 0) {
-        months.push(formatMonth(new Date()));
-    }
-    const labels = months.map(month => formatMonthLabel(month));
-    const incomeValues = months.map(month => (data[month] ?? [])
-        .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0));
-    const expenseValues = months.map(month => (data[month] ?? [])
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0));
+function renderCategoryChart(data, activeMonth) {
+    if (!chartCanvas) return;
 
-    if (trendChart) {
-        trendChart.destroy();
+    const monthTransactions = data[activeMonth] ?? [];
+    const expenseTotals = monthTransactions
+        .filter(transaction => transaction.type === 'expense')
+        .reduce((accumulator, transaction) => {
+            const category = transaction.category || 'Nerazvrstano';
+            const amount = Number(transaction.amount || 0);
+            accumulator.set(category, (accumulator.get(category) || 0) + amount);
+            return accumulator;
+        }, new Map());
+
+    const labels = Array.from(expenseTotals.keys());
+    const values = Array.from(expenseTotals.values());
+    const total = values.reduce((sum, value) => sum + value, 0);
+
+    if (categoryChart) {
+        categoryChart.destroy();
+        categoryChart = null;
     }
 
-    const ctx = document.getElementById('trend-chart');
-    trendChart = new Chart(ctx, {
-        type: 'line',
+    if (!labels.length || total <= 0) {
+        chartCanvas.style.display = 'none';
+        if (chartEmptyMessage) {
+            chartEmptyMessage.hidden = false;
+        }
+        if (chartDescription) {
+            chartDescription.textContent = 'Nema troškova za odabrani mjesec.';
+        }
+        return;
+    }
+
+    chartCanvas.style.display = 'block';
+    if (chartEmptyMessage) {
+        chartEmptyMessage.hidden = true;
+    }
+    if (chartDescription) {
+        chartDescription.textContent = 'Potrošnja po kategorijama u odabranom mjesecu';
+    }
+
+    const colors = generateCategoryColors(labels.length);
+
+    categoryChart = new Chart(chartCanvas, {
+        type: 'doughnut',
         data: {
             labels,
             datasets: [
                 {
-                    label: 'Prihodi',
-                    data: incomeValues,
-                    borderColor: '#047857',
-                    backgroundColor: 'rgba(4, 120, 87, 0.15)',
-                    tension: 0.35,
-                    fill: true
-                },
-                {
-                    label: 'Troškovi',
-                    data: expenseValues,
-                    borderColor: '#c0392b',
-                    backgroundColor: 'rgba(192, 57, 43, 0.1)',
-                    tension: 0.35,
-                    fill: true
+                    data: values,
+                    backgroundColor: colors,
+                    borderColor: '#ffffff',
+                    borderWidth: 2,
+                    hoverOffset: 6
                 }
             ]
         },
@@ -305,47 +324,11 @@ function renderTrendChart(data, activeMonth) {
             layout: {
                 padding: 8
             },
-            elements: {
-                line: {
-                    borderWidth: 2
-                },
-                point: {
-                    radius: 3,
-                    hoverRadius: 5
-                }
-            },
-            interaction: {
-                intersect: false,
-                mode: 'nearest'
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(82, 96, 109, 0.12)'
-                    },
-                    ticks: {
-                        callback: value => formatCurrency(Number(value)),
-                        font: {
-                            size: 11
-                        }
-                    }
-                },
-                x: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        font: {
-                            size: 11
-                        }
-                    }
-                }
-            },
             plugins: {
                 legend: {
                     position: 'bottom',
                     labels: {
+                        boxWidth: 14,
                         font: {
                             family: getComputedStyle(document.body).fontFamily,
                             size: 11
@@ -354,12 +337,39 @@ function renderTrendChart(data, activeMonth) {
                 },
                 tooltip: {
                     callbacks: {
-                        label: context => `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`
+                        label: context => {
+                            const label = context.label || '';
+                            const value = Number(context.parsed || 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                            return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+                        }
                     }
                 }
-            }
+            },
+            cutout: '58%'
         }
     });
+}
+
+function generateCategoryColors(count) {
+    const palette = [
+        '#1e6f9f',
+        '#0f766e',
+        '#c0392b',
+        '#b7791f',
+        '#4c1d95',
+        '#0f172a',
+        '#16a34a',
+        '#be123c',
+        '#0284c7',
+        '#f97316'
+    ];
+
+    const colors = [];
+    for (let index = 0; index < count; index += 1) {
+        colors.push(palette[index % palette.length]);
+    }
+    return colors;
 }
 
 function loadData() {
@@ -437,15 +447,6 @@ function formatDisplayDate(value) {
         month: '2-digit',
         day: '2-digit'
     });
-}
-
-function formatMonthLabel(monthKey) {
-    const [year, month] = monthKey.split('-').map(Number);
-    const date = new Date(year, month - 1, 1);
-    if (Number.isNaN(date.getTime())) {
-        return monthKey;
-    }
-    return date.toLocaleDateString('hr-HR', { month: 'short', year: 'numeric' });
 }
 
 function escapeHtml(str = '') {

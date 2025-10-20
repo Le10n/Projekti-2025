@@ -19,6 +19,9 @@
   const chartModeExpenseBtn = document.getElementById('chartModeExpenses');
   const chartModeIncomeBtn = document.getElementById('chartModeIncomes');
   const chartEmpty = document.getElementById('chartEmpty');
+  const chartCanvas = document.getElementById('categoryChart');
+  const chartCtx = chartCanvas.getContext('2d');
+  let categoryChart = null;
   const historyDateLabel = document.getElementById('historyDateLabel');
   const historyDateInput = document.getElementById('historyDate');
   const prevDayBtn = document.getElementById('prevDay');
@@ -53,7 +56,6 @@
     currentHistoryDate: '',
     chartMode: 'expense',
     monthCache: new Map(),
-    chart: null,
     editingId: null,
     toastTimeout: null,
   };
@@ -221,19 +223,42 @@
     cardBalance.classList.toggle('negative', balance < 0);
   }
 
-  function ensureChart() {
-    if (state.chart) return state.chart;
-    const ctx = document.getElementById('categoryChart').getContext('2d');
-    const baseLegendGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
-    state.chart = new Chart(ctx, {
+  const baseLegendGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
+
+  function destroyCategoryChart() {
+    if (categoryChart) {
+      categoryChart.destroy();
+      categoryChart = null;
+    }
+  }
+
+  function renderCategoryChart(labels, valuesEuro) {
+    const empty = !valuesEuro || valuesEuro.length === 0 || valuesEuro.every(value => value === 0);
+    if (empty) {
+      destroyCategoryChart();
+      chartCanvas.style.display = 'none';
+      chartEmpty.hidden = false;
+      return;
+    }
+
+    chartCanvas.style.display = 'block';
+    chartEmpty.hidden = true;
+
+    if (categoryChart) {
+      categoryChart.destroy();
+    }
+
+    const datasetColors = labels.map((_, index) => palette[index % palette.length]);
+
+    categoryChart = new Chart(chartCtx, {
       type: 'doughnut',
       data: {
-        labels: [],
+        labels,
         datasets: [
           {
             label: 'Iznos',
-            data: [],
-            backgroundColor: [],
+            data: valuesEuro,
+            backgroundColor: datasetColors,
             borderWidth: 1,
           },
         ],
@@ -241,21 +266,23 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
+        layout: { padding: 8 },
         plugins: {
           legend: {
             position: 'bottom',
             labels: {
               boxWidth: 16,
               generateLabels(chartInstance) {
-                const labels = baseLegendGenerator(chartInstance);
+                const defaultLabels = baseLegendGenerator(chartInstance);
                 const dataset = chartInstance.data.datasets[0];
                 const total = Array.isArray(dataset?.data)
                   ? dataset.data.reduce((acc, val) => acc + val, 0)
                   : 0;
-                return labels.map(item => {
-                  const value = dataset?.data?.[item.index] ?? 0;
-                  const cents = Math.round(value * 100);
-                  const percentage = total ? ((value / total) * 100).toFixed(1) : '0.0';
+                return defaultLabels.map(item => {
+                  const valueEuro = dataset?.data?.[item.index] ?? 0;
+                  const cents = Math.round(valueEuro * 100);
+                  const percentage = total ? ((valueEuro / total) * 100).toFixed(1) : '0.0';
                   const category = chartInstance.data.labels[item.index] ?? item.text;
                   return {
                     ...item,
@@ -268,19 +295,19 @@
           tooltip: {
             callbacks: {
               label(context) {
-                const value = context.parsed;
+                const valueEuro = context.parsed;
+                const cents = Math.round(valueEuro * 100);
                 const label = context.label || '';
                 const data = Array.isArray(context.dataset?.data) ? context.dataset.data : [];
                 const datasetTotal = data.reduce((acc, v) => acc + v, 0);
-                const percentage = datasetTotal ? ((value / datasetTotal) * 100).toFixed(1) : '0.0';
-                return `${label}: ${formatCurrency(value * 100)} (${percentage}%)`;
+                const percentage = datasetTotal ? ((valueEuro / datasetTotal) * 100).toFixed(1) : '0.0';
+                return `${label}: ${formatCurrency(cents)} (${percentage}%)`;
               },
             },
           },
         },
       },
     });
-    return state.chart;
   }
 
   const palette = [
@@ -297,29 +324,12 @@
   ];
 
   function renderChart() {
-    const chart = ensureChart();
     const monthData = computeMonthCache(state.currentMonth);
     const type = state.chartMode === 'expense' ? 'expense' : 'income';
     const groups = monthData.groups[type];
     const labels = Object.keys(groups);
-    const values = labels.map(label => groups[label] / 100);
-    if (!values.length) {
-      chart.data.labels = [];
-      chart.data.datasets[0].data = [];
-      chart.data.datasets[0].backgroundColor = [];
-      chart.update();
-      chart.canvas.parentElement?.classList.add('empty');
-      chartEmpty.hidden = false;
-      chart.canvas.style.display = 'none';
-      return;
-    }
-    chart.canvas.parentElement?.classList.remove('empty');
-    chartEmpty.hidden = true;
-    chart.canvas.style.display = '';
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = values;
-    chart.data.datasets[0].backgroundColor = labels.map((_, index) => palette[index % palette.length]);
-    chart.update();
+    const valuesEuro = labels.map(label => groups[label] / 100);
+    renderCategoryChart(labels, valuesEuro);
   }
 
   function renderHistoryDay() {
@@ -734,6 +744,12 @@
   editForm.addEventListener('submit', handleEditSubmit);
   editForm.addEventListener('keydown', handleEditKeydown);
   editFields.type.addEventListener('change', () => editFields.title.focus());
+
+  window.addEventListener('resize', () => {
+    if (categoryChart) {
+      categoryChart.resize();
+    }
+  });
 
   window.addEventListener('load', init);
 })();

@@ -110,6 +110,7 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 24px;
+  align-items: start;
 }
 
 .form-panel,
@@ -119,6 +120,10 @@ body {
   border-radius: 20px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   padding: 24px;
+}
+
+.chart-panel {
+  position: relative;
 }
 
 .form-panel h2,
@@ -237,9 +242,17 @@ body {
   margin-bottom: 16px;
 }
 
-.chart-wrapper {
+
+.chart-canvas {
   position: relative;
+  height: 380px;
   min-height: 380px;
+}
+
+#categoryChart {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 #chartEmpty {

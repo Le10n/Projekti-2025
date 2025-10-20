@@ -17,10 +17,18 @@ const DEFAULT_FILTERS = {
   affectChart: false
 };
 
+const DEFAULT_EXCHANGE_RATES = {
+  USD: 1.08,
+  HRK: 7.5345
+};
+
+const MAX_LOG_ENTRIES = 1000;
+
 const DEFAULT_SETTINGS = {
   lastMonth: '',
   budgets: {},
   darkMode: false,
+  autoDarkMode: false,
   weeklyBackup: false,
   lastBackupAt: '',
   pinHash: '',
@@ -28,7 +36,11 @@ const DEFAULT_SETTINGS = {
   defaultAccountId: '',
   filters: { ...DEFAULT_FILTERS },
   goals: [],
-  recurring: []
+  recurring: [],
+  log: [],
+  exchangeRates: { ...DEFAULT_EXCHANGE_RATES },
+  pdfStyle: 'modern',
+  recurringApplied: {}
 };
 
 const state = {
@@ -39,7 +51,12 @@ const state = {
   chartMode: 'expense',
   categoryChart: null,
   trendChart: null,
-  editingId: null
+  compareChart: null,
+  editingId: null,
+  calendarMonth: '',
+  fullViewActive: false,
+  budgetWarnings: new Map(),
+  recurringPromptOpen: false
 };
 
 const CenterNoDataPlugin = {
@@ -62,6 +79,29 @@ const CenterNoDataPlugin = {
     ctx.restore();
   }
 };
+
+function getLogList() {
+  if (!Array.isArray(state.settings.log)) {
+    state.settings.log = [];
+  }
+  return state.settings.log;
+}
+
+function addLog(type, meta = {}) {
+  const entry = { id: uuid(), ts: nowISO(), type, meta: meta || {} };
+  const log = getLogList();
+  log.push(entry);
+  if (log.length > MAX_LOG_ENTRIES) {
+    log.splice(0, log.length - MAX_LOG_ENTRIES);
+  }
+  state.settings.log = log;
+  saveSettings(state.settings);
+}
+
+function clearLog() {
+  state.settings.log = [];
+  saveSettings(state.settings);
+}
 
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -238,6 +278,32 @@ function showToast(message, type = 'info') {
   }, 2800);
 }
 
+function showBanner(message, tone = 'info', { persist = false, kind = null } = {}) {
+  const stack = document.getElementById('bannerStack');
+  if (!stack) return;
+  if (kind) {
+    stack.querySelectorAll(`[data-kind="${kind}"]`).forEach(el => el.remove());
+  }
+  const banner = document.createElement('div');
+  banner.className = `banner banner-${tone}`;
+  banner.setAttribute('role', tone === 'danger' ? 'alert' : 'status');
+  if (kind) banner.dataset.kind = kind;
+  const span = document.createElement('span');
+  span.textContent = message;
+  banner.appendChild(span);
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'banner-close';
+  closeBtn.setAttribute('aria-label', 'Zatvori upozorenje');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', () => banner.remove());
+  banner.appendChild(closeBtn);
+  stack.appendChild(banner);
+  if (!persist) {
+    setTimeout(() => banner.remove(), 6000);
+  }
+}
+
 function isTransfer(tx) {
   return tx.type === 'transfer' || (tx.category || '').trim().toLowerCase() === 'transfer';
 }
@@ -247,6 +313,10 @@ function normalizeCategory(name) {
   const trimmed = name.trim();
   if (!trimmed) return '';
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+function isDuplicateTransaction(candidate, list = state.transactions) {
+  return list.some(tx => tx.date === candidate.date && tx.type === candidate.type && tx.amountCents === candidate.amountCents && (tx.title || '').trim().toLowerCase() === candidate.title.trim().toLowerCase());
 }
 
 function filterByMonth(txs, yyyyMm) {
@@ -382,6 +452,11 @@ function getMonthlyTransactions(applyFilterToChart = false) {
 function setSelectedMonth(yyyyMm) {
   state.selectedMonth = yyyyMm;
   state.settings.lastMonth = yyyyMm;
+  state.budgetWarnings.clear();
+  const picker = document.getElementById('monthPicker');
+  if (picker && picker.value !== yyyyMm) picker.value = yyyyMm;
+  const bannerStack = document.getElementById('bannerStack');
+  if (bannerStack) bannerStack.innerHTML = '';
   saveSettings(state.settings);
 }
 
@@ -688,6 +763,10 @@ function handleTxFormSubmit(event) {
   event.preventDefault();
   const tx = collectTransactionForm();
   if (!tx) return;
+  if (isDuplicateTransaction(tx)) {
+    const proceed = confirm('Ova transakcija možda već postoji. Želiš li je svejedno spremiti?');
+    if (!proceed) return;
+  }
   addTransaction(tx);
   showToast('Transakcija dodana', 'success');
   event.target.reset();
@@ -772,6 +851,7 @@ function clearErrors() {
 function addTransaction(tx) {
   state.transactions.push(tx);
   saveTransactions(state.transactions);
+  addLog('ADD', { txId: tx.id, type: tx.type });
   afterDataChange(tx.date);
 }
 
@@ -815,6 +895,7 @@ function deleteTransaction(id) {
   if (!confirm('Sigurno obrisati?')) return;
   state.transactions = state.transactions.filter(tx => tx.id !== id);
   saveTransactions(state.transactions);
+  addLog('DELETE', { txId: id });
   afterDataChange(state.historyDate);
   showToast('Transakcija obrisana', 'info');
 }
@@ -864,6 +945,7 @@ function handleEditSubmit(event) {
     updatedAt: nowISO()
   });
   saveTransactions(state.transactions);
+  addLog('UPDATE', { txId: tx.id });
   closeModal('#editTxModal');
   afterDataChange(date);
   showToast('Transakcija ažurirana', 'success');
@@ -971,11 +1053,20 @@ function calcBudgetUsage(monthTxs) {
   }));
 }
 
-function warnIfBudgetHit() {
+function warnIfBudgetHit(month = state.selectedMonth) {
   const usage = calcBudgetUsage(getMonthlyTransactions(false));
   usage.forEach(item => {
-    if (item.limitCents > 0 && item.spentCents >= item.limitCents) {
-      showToast(`Budžet za ${item.category} je prekoračen!`, 'danger');
+    if (!item.limitCents) return;
+    const pct = (item.spentCents / item.limitCents) * 100;
+    if (pct >= 80) {
+      const tone = pct >= 100 ? 'danger' : 'warning';
+      const message = `${item.category} ${pct.toFixed(0)}% (${formatCurrencyHR(item.spentCents)} / ${formatCurrencyHR(item.limitCents)})`;
+      showBanner(message, tone, { kind: `budget-${item.category}` });
+      const key = `${month}:${item.category}`;
+      if (pct >= 80 && state.budgetWarnings.get(key) !== (pct >= 100 ? 'danger' : 'warning')) {
+        addLog('BUDGET_HIT', { category: item.category, pct: Number(pct.toFixed(0)), month });
+        state.budgetWarnings.set(key, pct >= 100 ? 'danger' : 'warning');
+      }
     }
   });
 }
@@ -1061,16 +1152,35 @@ function handleRecurringSubmit(event) {
   renderRecurringList();
 }
 
-function applyRecurringForMonth() {
+function maybePromptRecurring(month = state.selectedMonth) {
+  const active = state.settings.recurring.filter(r => r.active);
+  if (!month || active.length === 0) return;
+  state.settings.recurringApplied = state.settings.recurringApplied || {};
+  if (state.settings.recurringApplied[month]) return;
+  if (state.recurringPromptOpen) return;
+  state.recurringPromptOpen = true;
+  try {
+    const confirmed = confirm('Primijeniti aktivne ponavljajuće stavke za ovaj mjesec?');
+    if (confirmed) {
+      applyRecurringForMonth(month);
+    } else {
+      state.settings.recurringApplied[month] = 'skipped';
+      saveSettings(state.settings);
+    }
+  } finally {
+    state.recurringPromptOpen = false;
+  }
+}
+
+function applyRecurringForMonth(month = state.selectedMonth) {
   const defs = state.settings.recurring.filter(r => r.active);
   if (defs.length === 0) {
     showToast('Nema aktivnih definicija.', 'info');
     return;
   }
-  const yyyyMm = state.selectedMonth;
   defs.forEach(def => {
-    const date = buildRecurringDate(yyyyMm, def.day);
-    state.transactions.push({
+    const date = buildRecurringDate(month, def.day);
+    const tx = {
       id: uuid(),
       type: def.type,
       title: def.title,
@@ -1084,10 +1194,16 @@ function applyRecurringForMonth() {
       recurringId: def.id,
       createdAt: nowISO(),
       updatedAt: nowISO()
-    });
+    };
+    state.transactions.push(tx);
+    addLog('ADD', { txId: tx.id, recurring: true });
   });
   saveTransactions(state.transactions);
-  afterDataChange(`${yyyyMm}-${String(new Date(yyyyMm + '-01').getDate()).padStart(2, '0')}`);
+  state.settings.recurringApplied = state.settings.recurringApplied || {};
+  state.settings.recurringApplied[month] = true;
+  saveSettings(state.settings);
+  afterDataChange(`${month}-${String(new Date(month + '-01').getDate()).padStart(2, '0')}`);
+  addLog('RECUR_APPLIED', { count: defs.length, month });
   showToast('Ponavljajuće transakcije dodane', 'success');
 }
 
@@ -1301,6 +1417,8 @@ function transferBetweenAccounts(fromId, toId, cents, date, note) {
   };
   state.transactions.push(outTx, inTx);
   saveTransactions(state.transactions);
+  addLog('ADD', { txId: outTx.id, transfer: true });
+  addLog('ADD', { txId: inTx.id, transfer: true });
   afterDataChange(date);
 }
 
@@ -1363,8 +1481,12 @@ function updateFiltersForm() {
 }
 
 function updateMenus() {
-  document.getElementById('toggleDark').checked = Boolean(state.settings.darkMode);
-  document.getElementById('backupToggle').checked = Boolean(state.settings.weeklyBackup);
+  const darkToggle = document.getElementById('toggleDark');
+  if (darkToggle) darkToggle.checked = Boolean(state.settings.darkMode);
+  const backupToggle = document.getElementById('backupToggle');
+  if (backupToggle) backupToggle.checked = Boolean(state.settings.weeklyBackup);
+  const pdfSelect = document.getElementById('pdfDefaultStyle');
+  if (pdfSelect) pdfSelect.value = state.settings.pdfStyle || 'modern';
 }
 function maybeOfferWeeklyBackup() {
   if (!state.settings.weeklyBackup) return;
@@ -1388,6 +1510,7 @@ function exportAccount() {
     transactions: state.transactions,
     settings: state.settings
   };
+  addLog('EXPORT', { count: state.transactions.length });
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1435,7 +1558,22 @@ async function importAccount(file) {
   syncHistoryDateForMonth();
   renderHistoryDay();
   warnIfBudgetHit();
+  addLog('IMPORT', { count: (payload.transactions || []).length });
   showToast('Uvoz dovršen', 'success');
+}
+
+function wipeAllData() {
+  const confirmation = prompt('Upiši RIJEČ "OBRIŠI" (bez navodnika) za potvrdu:');
+  if (confirmation !== 'OBRIŠI') return;
+  const confirmed = confirm('Ovo će trajno ukloniti SVE lokalne podatke (transakcije, postavke, log, PIN). Nastavi?');
+  if (!confirmed) return;
+  localStorage.removeItem(STORAGE_KEYS.transactions);
+  localStorage.removeItem(STORAGE_KEYS.settings);
+  state.transactions = [];
+  state.settings = loadSettings();
+  addLog('DELETE', { info: 'wipeAll' });
+  alert('Svi podaci su obrisani. Aplikacija će se resetirati.');
+  location.reload();
 }
 
 function mergeTransactions(existing, incoming) {
@@ -1480,7 +1618,7 @@ function exportMonthCSV(yyyyMm) {
   URL.revokeObjectURL(url);
 }
 
-function exportMonthPDF(yyyyMm) {
+function exportMonthPDFModern(yyyyMm) {
   const { jsPDF } = window.jspdf || {};
   if (!jsPDF) {
     alert('PDF biblioteka nije dostupna.');
@@ -1574,6 +1712,77 @@ function exportMonthPDF(yyyyMm) {
 
   doc.save(`Financijski_izvjestaj_${yyyyMm}.pdf`);
 }
+function exportMonthPDF(yyyyMm) {
+  const style = (state.settings.pdfStyle || 'modern');
+  if (style === 'classic') {
+    exportMonthPDFClassic(yyyyMm);
+  } else {
+    exportMonthPDFModern(yyyyMm);
+  }
+}
+
+function exportMonthPDFClassic(yyyyMm) {
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF) {
+    alert('PDF biblioteka nije dostupna.');
+    return;
+  }
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const margin = 12;
+  let y = margin;
+  const txs = filterByMonth(state.transactions, yyyyMm).filter(tx => !isTransfer(tx));
+  const incomesC = sumByType(txs, 'income');
+  const expensesC = sumByType(txs, 'expense');
+  const balance = (incomesC - expensesC) / 100;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text(`Izvještaj ${yyyyMm}`, margin, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Generirano: ${new Date().toLocaleDateString('hr-HR')}`, margin, y);
+  y += 6;
+  doc.setDrawColor(200);
+  doc.line(margin, y, 210 - margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sažetak', margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Prihodi:  ${(incomesC / 100).toFixed(2)} €`, margin, y); y += 5;
+  doc.text(`Troškovi: ${(expensesC / 100).toFixed(2)} €`, margin, y); y += 5;
+  doc.text(`Saldo:    ${balance.toFixed(2)} €`, margin, y); y += 8;
+  doc.line(margin, y, 210 - margin, y);
+  y += 6;
+  const byCat = groupByCategory(txs, 'expense');
+  const rows = Object.entries(byCat)
+    .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+    .map(([cat, val]) => [cat, `${(val / 100).toFixed(2)} €`]);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Troškovi po kategorijama', margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Kategorija', margin, y);
+  doc.text('Ukupno', 120, y);
+  y += 4;
+  doc.setDrawColor(210);
+  doc.line(margin, y, 210 - margin, y);
+  y += 4;
+  rows.forEach(row => {
+    if (y > 270) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.text(row[0], margin, y);
+    doc.text(row[1], 120, y);
+    y += 6;
+  });
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text('Klasični izvještaj — Financijski tracker — © Leon Sošić 2025', 105, 290, { align: 'center' });
+  doc.save(`Izvjestaj_klasicni_${yyyyMm}.pdf`);
+}
+
 let typeFocusBound = false;
 function setupTypeFocus() {
   if (typeFocusBound) return;
@@ -1604,12 +1813,8 @@ function setupKeyboardShortcuts() {
       closeModal('#shortcutsModal');
       closeModal('#aboutModal');
       closeDrawer('#filterDrawer');
-      const accountMenu = document.getElementById('accountMenu');
-      const moreMenu = document.getElementById('moreMenu');
-      if (accountMenu) accountMenu.hidden = true;
-      if (moreMenu) moreMenu.hidden = true;
-      document.getElementById('moreMenuBtn')?.setAttribute('aria-expanded', 'false');
-      document.getElementById('accountMenuBtn')?.setAttribute('aria-expanded', 'false');
+      hideAccountMenu();
+      hideMoreMenu();
       return;
     }
     if (event.ctrlKey && event.key.toLowerCase() === 'n') {
@@ -1631,7 +1836,32 @@ function setupKeyboardShortcuts() {
   });
 }
 
+function hideMenuById(menuId, btnId) {
+  const menu = document.getElementById(menuId);
+  const btn = document.getElementById(btnId);
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function hideMenuById(menuId, btnId) {
+  const menu = document.getElementById(menuId);
+  const btn = document.getElementById(btnId);
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function hideAccountMenu() {
+  hideMenuById('accountMenu', 'accountMenuBtn');
+}
+
+function hideMoreMenu() {
+  hideMenuById('moreMenu', 'moreMenuBtn');
+}
+
 function setupMenus() {
+  if (window.__menus_wired__) return;
+  window.__menus_wired__ = true;
+
   const configs = [
     { btnSelector: '#accountMenuBtn', menuSelector: '#accountMenu' },
     { btnSelector: '#moreMenuBtn', menuSelector: '#moreMenu' }
@@ -1642,62 +1872,47 @@ function setupMenus() {
       btn: document.querySelector(btnSelector),
       menu: document.querySelector(menuSelector)
     }))
-    .filter(entry => entry.btn && entry.menu);
+    .filter(({ btn, menu }) => btn && menu);
 
-  const hideMenu = entry => {
-    entry.menu.hidden = true;
-    entry.btn.setAttribute('aria-expanded', 'false');
+  const closeAll = () => {
+    entries.forEach(({ btn, menu }) => {
+      if (menu) menu.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
   };
 
-  entries.forEach(entry => {
-    hideMenu(entry);
-    entry.btn.addEventListener('click', event => {
-      event.stopPropagation();
-      const willOpen = entry.menu.hidden;
-      entries.forEach(other => {
-        if (other !== entry) hideMenu(other);
-      });
-      entry.menu.hidden = !willOpen;
-      entry.btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    });
-  });
+  const isInMenu = target => entries.some(({ btn, menu }) => menu.contains(target) || btn === target);
 
-  document.addEventListener('click', event => {
-    entries.forEach(entry => {
-      if (!entry.menu.hidden && !entry.menu.contains(event.target) && event.target !== entry.btn) {
-        hideMenu(entry);
+  entries.forEach(({ btn, menu }) => {
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('click', event => {
+      event.stopPropagation();
+      const willOpen = menu.hidden;
+      closeAll();
+      if (willOpen) {
+        menu.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
       }
     });
   });
 
+  document.addEventListener('click', event => {
+    if (!isInMenu(event.target)) closeAll();
+  }, { capture: true });
+
   window.addEventListener('keydown', event => {
-    if (event.key === 'Escape') {
-      entries.forEach(hideMenu);
-    }
+    if (event.key === 'Escape') closeAll();
   });
-
-  const accountBtn = document.getElementById('accountMenuBtn');
-  const moreBtn = document.getElementById('moreMenuBtn');
-  const accountMenu = document.getElementById('accountMenu');
-  const moreMenu = document.getElementById('moreMenu');
-
-  const closeAccountMenu = () => {
-    if (!accountMenu) return;
-    accountMenu.hidden = true;
-    accountBtn?.setAttribute('aria-expanded', 'false');
-  };
-  const closeMoreMenu = () => {
-    if (!moreMenu) return;
-    moreMenu.hidden = true;
-    moreBtn?.setAttribute('aria-expanded', 'false');
-  };
+  window.addEventListener('scroll', closeAll, { passive: true });
+  window.addEventListener('resize', closeAll);
 
   document.getElementById('btnExport')?.addEventListener('click', () => {
-    closeAccountMenu();
+    hideAccountMenu();
     exportAccount();
   });
   document.getElementById('btnImport')?.addEventListener('click', () => {
-    closeAccountMenu();
+    hideAccountMenu();
     document.getElementById('importFile')?.click();
   });
   document.getElementById('importFile')?.addEventListener('change', event => {
@@ -1707,20 +1922,27 @@ function setupMenus() {
   });
 
   const withMoreMenuClose = callback => () => {
-    closeMoreMenu();
-    const result = callback();
+    hideMoreMenu();
+    const result = callback?.();
     if (result && typeof result.then === 'function') {
       result.catch(err => console.error(err));
     }
   };
 
+  document.getElementById('goHome')?.addEventListener('click', withMoreMenuClose(() => showDashboard()));
   document.getElementById('openFilterDrawer')?.addEventListener('click', withMoreMenuClose(() => openDrawer('#filterDrawer')));
   document.getElementById('btnExportCSV')?.addEventListener('click', withMoreMenuClose(() => exportMonthCSV(state.selectedMonth)));
   document.getElementById('btnExportPDF')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDF(state.selectedMonth)));
+  document.getElementById('btnExportPDFModern')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDFModern(state.selectedMonth)));
+  document.getElementById('btnExportPDFClassic')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDFClassic(state.selectedMonth)));
+  document.getElementById('openCalendar')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCalendarView)));
+  document.getElementById('openCompare')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCompareView)));
+  document.getElementById('openAnalysis')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderAnalysisView)));
+  document.getElementById('openLog')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderLogView)));
   document.getElementById('backupToggle')?.addEventListener('change', event => {
     state.settings.weeklyBackup = event.target.checked;
     saveSettings(state.settings);
-    closeMoreMenu();
+    hideMoreMenu();
   });
   document.getElementById('openBudgets')?.addEventListener('click', withMoreMenuClose(() => openModal('#budgetsModal')));
   document.getElementById('openRecurring')?.addEventListener('click', withMoreMenuClose(() => openModal('#recurringModal')));
@@ -1753,6 +1975,805 @@ function setupMenus() {
   }));
   document.getElementById('openShortcuts')?.addEventListener('click', withMoreMenuClose(() => openModal('#shortcutsModal')));
   document.getElementById('openAbout')?.addEventListener('click', withMoreMenuClose(() => openModal('#aboutModal')));
+  document.getElementById('wipeAll')?.addEventListener('click', withMoreMenuClose(() => wipeAllData()));
+  document.getElementById('pdfDefaultStyle')?.addEventListener('change', event => {
+    state.settings.pdfStyle = event.target.value;
+    saveSettings(state.settings);
+  });
+}
+function showDashboard() {
+  const dashboard = document.getElementById('dashboard');
+  const fullView = document.getElementById('fullView');
+  if (dashboard) dashboard.hidden = false;
+  if (fullView) {
+    fullView.hidden = true;
+    fullView.innerHTML = '';
+  }
+  hideMoreMenu();
+  hideAccountMenu();
+  state.fullViewActive = false;
+}
+
+function showFullView(renderer) {
+  const dashboard = document.getElementById('dashboard');
+  const fullView = document.getElementById('fullView');
+  if (!dashboard || !fullView) return;
+  dashboard.hidden = true;
+  fullView.hidden = false;
+  fullView.innerHTML = '';
+  state.fullViewActive = true;
+  if (typeof renderer === 'function') {
+    renderer(fullView);
+  }
+}
+
+
+function renderCalendarView(container) {
+  const month = state.calendarMonth || state.selectedMonth || new Date().toISOString().slice(0, 7);
+  state.calendarMonth = month;
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Kalendar troškova — <span id="calMonthLabel"></span></h2>
+      <div class="actions">
+        <button id="calPrev" type="button">◀</button>
+        <input type="month" id="calMonth">
+        <button id="calNext" type="button">▶</button>
+        <button id="calBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <div id="calendarGrid" class="calendar-grid"></div>
+    <div class="legend">
+      <span class="dot expense"></span> trošak &nbsp; <span class="dot income"></span> prihod
+    </div>
+  `;
+  const monthInput = container.querySelector('#calMonth');
+  const monthLabel = container.querySelector('#calMonthLabel');
+  const grid = container.querySelector('#calendarGrid');
+  const prevBtn = container.querySelector('#calPrev');
+  const nextBtn = container.querySelector('#calNext');
+  const backBtn = container.querySelector('#calBackHome');
+
+  const renderGrid = currentMonth => {
+    const txs = filterByMonth(state.transactions, currentMonth);
+    const expenseMap = new Map();
+    const incomeMap = new Map();
+    txs.forEach(tx => {
+      if (isTransfer(tx)) return;
+      const dayKey = tx.date;
+      if (!dayKey) return;
+      const target = tx.type === 'expense' ? expenseMap : incomeMap;
+      const prev = target.get(dayKey) || 0;
+      target.set(dayKey, prev + (tx.amountCents || 0));
+    });
+    const maxExpense = Math.max(0, ...Array.from(expenseMap.values()));
+    grid.innerHTML = '';
+    const baseDate = new Date(`${currentMonth}-01T00:00`);
+    const startWeekday = (baseDate.getDay() + 6) % 7;
+    const daysInMonth = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0).getDate();
+    for (let i = 0; i < startWeekday; i += 1) {
+      const filler = document.createElement('div');
+      filler.className = 'day empty';
+      grid.appendChild(filler);
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      const expenseCents = expenseMap.get(dateStr) || 0;
+      const incomeCents = incomeMap.get(dateStr) || 0;
+      const dayEl = document.createElement('div');
+      dayEl.className = 'day';
+      dayEl.innerHTML = `<span class="date">${day}</span>`;
+      if (expenseCents > 0 || incomeCents > 0) {
+        const intensity = expenseCents > 0 && maxExpense > 0 ? Math.min(0.7, 0.15 + (expenseCents / maxExpense) * 0.55) : 0.2;
+        const overlay = document.createElement('div');
+        overlay.className = 'heat';
+        if (expenseCents > 0 && incomeCents > 0) {
+          overlay.style.background = `linear-gradient(135deg, rgba(239,68,68,${Math.max(intensity, 0.2)}) 0%, rgba(239,68,68,${Math.max(intensity, 0.2)}) 50%, rgba(22,163,74,0.35) 50%, rgba(22,163,74,0.45) 100%)`;
+        } else if (expenseCents > 0) {
+          overlay.style.background = `rgba(239,68,68,${Math.max(intensity, 0.2)})`;
+        } else {
+          overlay.style.background = 'rgba(22,163,74,0.25)';
+        }
+        dayEl.appendChild(overlay);
+      }
+      if (incomeCents > 0) {
+        const incomeDot = document.createElement('span');
+        incomeDot.className = 'dot income';
+        incomeDot.style.position = 'absolute';
+        incomeDot.style.left = '8px';
+        incomeDot.style.bottom = '8px';
+        dayEl.appendChild(incomeDot);
+      }
+      const sumEl = document.createElement('div');
+      sumEl.className = 'sum';
+      if (expenseCents > 0 && incomeCents > 0) {
+        sumEl.textContent = `${formatCurrencyHR(incomeCents)} / -${formatCurrencyHR(expenseCents)}`;
+      } else if (expenseCents > 0) {
+        sumEl.textContent = `-${formatCurrencyHR(expenseCents)}`;
+      } else if (incomeCents > 0) {
+        sumEl.textContent = `${formatCurrencyHR(incomeCents)}`;
+      } else {
+        sumEl.textContent = '';
+      }
+      dayEl.appendChild(sumEl);
+      dayEl.addEventListener('click', () => {
+        setSelectedMonth(currentMonth);
+        setHistoryDate(dateStr);
+        renderKPIs();
+        renderCategoryChart();
+        renderBudgets();
+        renderHistoryDay();
+        warnIfBudgetHit(currentMonth);
+        maybePromptRecurring(currentMonth);
+        showDashboard();
+      });
+      grid.appendChild(dayEl);
+    }
+  };
+
+  const setMonth = newMonth => {
+    if (!newMonth) return;
+    state.calendarMonth = newMonth;
+    monthInput.value = newMonth;
+    const labelText = new Date(`${newMonth}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+    monthLabel.textContent = labelText;
+    renderGrid(newMonth);
+  };
+
+  setMonth(month);
+  prevBtn.addEventListener('click', () => {
+    const current = new Date(`${state.calendarMonth}-01T00:00`);
+    current.setMonth(current.getMonth() - 1);
+    setMonth(current.toISOString().slice(0, 7));
+  });
+  nextBtn.addEventListener('click', () => {
+    const current = new Date(`${state.calendarMonth}-01T00:00`);
+    current.setMonth(current.getMonth() + 1);
+    setMonth(current.toISOString().slice(0, 7));
+  });
+  monthInput.addEventListener('change', event => setMonth(event.target.value));
+  backBtn.addEventListener('click', () => showDashboard());
+}
+
+function renderCompareView(container) {
+  const defaultTo = state.selectedMonth || new Date().toISOString().slice(0, 7);
+  const fromDate = new Date(`${defaultTo}-01T00:00`);
+  fromDate.setMonth(fromDate.getMonth() - 1);
+  const defaultFrom = fromDate.toISOString().slice(0, 7);
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Usporedba mjeseci</h2>
+      <div class="actions">
+        <label>Od:<input type="month" id="cmpFrom" value="${defaultFrom}"></label>
+        <label>Do:<input type="month" id="cmpTo" value="${defaultTo}"></label>
+        <button id="cmpSwap" type="button" class="btn btn-secondary">Zamijeni</button>
+        <button id="cmpBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <div class="chart-canvas"><canvas id="cmpChart" height="380"></canvas></div>
+    <div id="cmpStats" class="stats"></div>
+  `;
+  const fromInput = container.querySelector('#cmpFrom');
+  const toInput = container.querySelector('#cmpTo');
+  const swapBtn = container.querySelector('#cmpSwap');
+  const backBtn = container.querySelector('#cmpBackHome');
+  const statsEl = container.querySelector('#cmpStats');
+  const ctx = container.querySelector('#cmpChart').getContext('2d');
+
+  const monthStats = month => {
+    const txs = filterByMonth(state.transactions, month);
+    const incomes = sumByType(txs, 'income') / 100;
+    const expenses = sumByType(txs, 'expense') / 100;
+    const balance = incomes - expenses;
+    return { incomes, expenses, balance };
+  };
+
+  const updateChart = () => {
+    const fromMonth = fromInput.value;
+    const toMonth = toInput.value;
+    if (!fromMonth || !toMonth) return;
+    const from = monthStats(fromMonth);
+    const to = monthStats(toMonth);
+    const labels = [
+      new Date(`${fromMonth}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' }),
+      new Date(`${toMonth}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' })
+    ];
+    if (state.compareChart) {
+      state.compareChart.destroy();
+      state.compareChart = null;
+    }
+    state.compareChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Prihodi',
+            data: [from.incomes, to.incomes],
+            backgroundColor: '#16a34a'
+          },
+          {
+            label: 'Troškovi',
+            data: [from.expenses, to.expenses],
+            backgroundColor: '#dc2626'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const currentValue = Number(context.parsed.y || 0);
+                const baseLine = `${context.dataset.label} — ${context.label}: ${formatCurrencyHR(Math.round(currentValue * 100))}`;
+                const datasetValues = context.dataset.data || [];
+                const otherIndex = context.dataIndex === 0 ? 1 : 0;
+                if (datasetValues.length < 2 || typeof datasetValues[otherIndex] !== 'number') {
+                  return baseLine;
+                }
+                const comparisonValue = datasetValues[otherIndex];
+                const otherLabel = labels[otherIndex] || '';
+                const diff = currentValue - comparisonValue;
+                if (Math.abs(diff) < 0.005) {
+                  return `${baseLine}\nΔ Bez promjene u odnosu na ${otherLabel}`;
+                }
+                const sign = diff > 0 ? '+' : '−';
+                const diffCurrency = formatCurrencyHR(Math.round(Math.abs(diff) * 100));
+                const pctRaw = comparisonValue === 0 ? null : (diff / comparisonValue) * 100;
+                const pctText = pctRaw === null ? 'n/a' : `${pctRaw > 0 ? '+' : '−'}${Math.abs(pctRaw).toFixed(1)}%`;
+                return `${baseLine}\nΔ ${sign}${diffCurrency} (${pctText}) u odnosu na ${otherLabel}`;
+              }
+            }
+          },
+          legend: { position: 'bottom' }
+        },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+    const balanceChange = from.balance === 0 ? (to.balance !== 0 ? 100 : 0) : ((to.balance - from.balance) / Math.abs(from.balance)) * 100;
+    statsEl.textContent = `Saldo Od: ${from.balance.toFixed(2)} € · Saldo Do: ${to.balance.toFixed(2)} € · Promjena: ${balanceChange.toFixed(1)}%`;
+  };
+
+  swapBtn.addEventListener('click', () => {
+    const temp = fromInput.value;
+    fromInput.value = toInput.value;
+    toInput.value = temp;
+    updateChart();
+  });
+  fromInput.addEventListener('change', updateChart);
+  toInput.addEventListener('change', updateChart);
+  backBtn.addEventListener('click', () => showDashboard());
+  updateChart();
+}
+
+function renderAnalysisView(container) {
+  const activeMonth = state.selectedMonth || new Date().toISOString().slice(0, 7);
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Analiza kategorija — <span id="anMonthLabel"></span></h2>
+      <div class="actions">
+        <input type="month" id="anMonth" value="${activeMonth}">
+        <select id="anType">
+          <option value="expense">Troškovi</option>
+          <option value="income">Prihodi</option>
+        </select>
+        <button id="anBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <table id="anTable" class="table">
+      <thead><tr><th data-sort="category">Kategorija</th><th data-sort="count">Broj</th><th data-sort="avg">Prosjek (€)</th><th data-sort="total">Ukupno (€)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  `;
+  const monthInput = container.querySelector('#anMonth');
+  const typeSelect = container.querySelector('#anType');
+  const backBtn = container.querySelector('#anBackHome');
+  const label = container.querySelector('#anMonthLabel');
+  const tbody = container.querySelector('#anTable tbody');
+  let sortKey = 'total';
+  let sortDir = 'desc';
+
+  const buildData = (month, type) => {
+    const txs = filterByMonth(state.transactions, month);
+    const rows = new Map();
+    txs.forEach(tx => {
+      if (isTransfer(tx) || tx.type !== type) return;
+      const entries = splitEntries(tx);
+      entries.forEach(entry => {
+        if (!entry.category) return;
+        const key = entry.category;
+        const current = rows.get(key) || { category: key, count: 0, total: 0 };
+        current.count += 1;
+        current.total += entry.amountCents || 0;
+        rows.set(key, current);
+      });
+    });
+    return Array.from(rows.values()).map(item => ({
+      category: item.category,
+      count: item.count,
+      total: (item.total / 100),
+      avg: item.count > 0 ? (item.total / item.count) / 100 : 0
+    }));
+  };
+
+  const renderTable = () => {
+    const month = monthInput.value || activeMonth;
+    const type = typeSelect.value;
+    label.textContent = new Date(`${month}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+    let data = buildData(month, type);
+    data.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      switch (sortKey) {
+        case 'category':
+          return a.category.localeCompare(b.category) * dir;
+        case 'count':
+          return (a.count - b.count) * dir;
+        case 'avg':
+          return (a.avg - b.avg) * dir;
+        case 'total':
+        default:
+          return (a.total - b.total) * dir;
+      }
+    });
+    tbody.innerHTML = '';
+    if (data.length === 0) {
+      const emptyRow = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      cell.textContent = 'Nema podataka za odabrani mjesec.';
+      cell.className = 'muted';
+      emptyRow.appendChild(cell);
+      tbody.appendChild(emptyRow);
+      return;
+    }
+    data.forEach(item => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${item.category}</td>
+        <td>${item.count}</td>
+        <td class="align-right">${item.avg.toFixed(2)}</td>
+        <td class="align-right">${item.total.toFixed(2)}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  };
+
+  container.querySelectorAll('#anTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (sortKey === key) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortKey = key;
+        sortDir = key === 'category' ? 'asc' : 'desc';
+      }
+      renderTable();
+    });
+  });
+  monthInput.addEventListener('change', renderTable);
+  typeSelect.addEventListener('change', renderTable);
+  backBtn.addEventListener('click', () => showDashboard());
+  renderTable();
+}
+
+function renderLogView(container) {
+  const entries = [...getLogList()].sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Log aktivnosti</h2>
+      <div class="actions">
+        <button id="logClear" type="button" class="btn btn-secondary">Očisti log</button>
+        <button id="logBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <table id="logTable" class="table">
+      <thead><tr><th>Vrijeme</th><th>Tip</th><th>Detalji</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  `;
+  const tbody = container.querySelector('#logTable tbody');
+  const clearBtn = container.querySelector('#logClear');
+  const backBtn = container.querySelector('#logBackHome');
+  if (entries.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.textContent = 'Još nema zapisa u logu.';
+    cell.className = 'muted';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+  } else {
+    entries.forEach(entry => {
+      const row = document.createElement('tr');
+      const timeCell = document.createElement('td');
+      timeCell.textContent = entry.ts ? new Date(entry.ts).toLocaleString('hr-HR') : '';
+      const typeCell = document.createElement('td');
+      typeCell.textContent = entry.type || '';
+      const metaCell = document.createElement('td');
+      metaCell.textContent = entry.meta ? JSON.stringify(entry.meta) : '';
+      row.append(timeCell, typeCell, metaCell);
+      tbody.appendChild(row);
+    });
+  }
+  clearBtn.addEventListener('click', () => {
+    if (!confirm('Očistiti log aktivnosti?')) return;
+    clearLog();
+    renderLogView(container);
+  });
+  backBtn.addEventListener('click', () => showDashboard());
+}
+
+function renderCalendarView(container) {
+  const month = state.calendarMonth || state.selectedMonth || new Date().toISOString().slice(0, 7);
+  state.calendarMonth = month;
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Kalendar troškova — <span id="calMonthLabel"></span></h2>
+      <div class="actions">
+        <button id="calPrev" type="button">◀</button>
+        <input type="month" id="calMonth">
+        <button id="calNext" type="button">▶</button>
+        <button id="calBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <div id="calendarGrid" class="calendar-grid"></div>
+    <div class="legend">
+      <span class="dot expense"></span> trošak &nbsp; <span class="dot income"></span> prihod
+    </div>
+  `;
+  const monthInput = container.querySelector('#calMonth');
+  const monthLabel = container.querySelector('#calMonthLabel');
+  const grid = container.querySelector('#calendarGrid');
+  const prevBtn = container.querySelector('#calPrev');
+  const nextBtn = container.querySelector('#calNext');
+  const backBtn = container.querySelector('#calBackHome');
+
+  const renderGrid = currentMonth => {
+    const txs = filterByMonth(state.transactions, currentMonth);
+    const expenseMap = new Map();
+    const incomeMap = new Map();
+    txs.forEach(tx => {
+      if (isTransfer(tx)) return;
+      const dayKey = tx.date;
+      if (!dayKey) return;
+      const target = tx.type === 'expense' ? expenseMap : incomeMap;
+      target.set(dayKey, (target.get(dayKey) || 0) + (tx.amountCents || 0));
+    });
+    const maxExpense = Math.max(0, ...expenseMap.values());
+    grid.innerHTML = '';
+    const baseDate = new Date(`${currentMonth}-01T00:00`);
+    const startWeekday = (baseDate.getDay() + 6) % 7;
+    const daysInMonth = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0).getDate();
+    for (let i = 0; i < startWeekday; i += 1) {
+      const filler = document.createElement('div');
+      filler.className = 'day empty';
+      grid.appendChild(filler);
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
+      const expenseCents = expenseMap.get(dateStr) || 0;
+      const incomeCents = incomeMap.get(dateStr) || 0;
+      const dayEl = document.createElement('div');
+      dayEl.className = 'day';
+      dayEl.innerHTML = `<span class="date">${day}</span>`;
+      if (expenseCents > 0 || incomeCents > 0) {
+        const intensity = expenseCents > 0 && maxExpense > 0 ? Math.min(0.7, 0.15 + (expenseCents / maxExpense) * 0.55) : 0.25;
+        const overlay = document.createElement('div');
+        overlay.className = 'heat';
+        if (expenseCents > 0 && incomeCents > 0) {
+          overlay.style.background = `linear-gradient(135deg, rgba(239,68,68,${Math.max(intensity, 0.25)}) 0%, rgba(239,68,68,${Math.max(intensity, 0.25)}) 50%, rgba(22,163,74,0.35) 50%, rgba(22,163,74,0.45) 100%)`;
+        } else if (expenseCents > 0) {
+          overlay.style.background = `rgba(239,68,68,${Math.max(intensity, 0.25)})`;
+        } else {
+          overlay.style.background = 'rgba(22,163,74,0.3)';
+        }
+        dayEl.appendChild(overlay);
+      }
+      if (incomeCents > 0) {
+        const incomeDot = document.createElement('span');
+        incomeDot.className = 'dot income';
+        incomeDot.style.position = 'absolute';
+        incomeDot.style.left = '8px';
+        incomeDot.style.bottom = '8px';
+        dayEl.appendChild(incomeDot);
+      }
+      const sumEl = document.createElement('div');
+      sumEl.className = 'sum';
+      if (expenseCents > 0 && incomeCents > 0) {
+        sumEl.textContent = `${formatCurrencyHR(incomeCents)} / -${formatCurrencyHR(expenseCents)}`;
+      } else if (expenseCents > 0) {
+        sumEl.textContent = `-${formatCurrencyHR(expenseCents)}`;
+      } else if (incomeCents > 0) {
+        sumEl.textContent = `${formatCurrencyHR(incomeCents)}`;
+      }
+      dayEl.appendChild(sumEl);
+      dayEl.addEventListener('click', () => {
+        setSelectedMonth(currentMonth);
+        setHistoryDate(dateStr);
+        renderKPIs();
+        renderCategoryChart();
+        renderBudgets();
+        renderHistoryDay();
+        warnIfBudgetHit(currentMonth);
+        maybePromptRecurring(currentMonth);
+        showDashboard();
+      });
+      grid.appendChild(dayEl);
+    }
+  };
+
+  const setMonth = newMonth => {
+    if (!newMonth) return;
+    state.calendarMonth = newMonth;
+    monthInput.value = newMonth;
+    monthLabel.textContent = new Date(`${newMonth}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+    renderGrid(newMonth);
+  };
+
+  setMonth(month);
+  prevBtn.addEventListener('click', () => {
+    const current = new Date(`${state.calendarMonth}-01T00:00`);
+    current.setMonth(current.getMonth() - 1);
+    setMonth(current.toISOString().slice(0, 7));
+  });
+  nextBtn.addEventListener('click', () => {
+    const current = new Date(`${state.calendarMonth}-01T00:00`);
+    current.setMonth(current.getMonth() + 1);
+    setMonth(current.toISOString().slice(0, 7));
+  });
+  monthInput.addEventListener('change', event => setMonth(event.target.value));
+  backBtn.addEventListener('click', () => showDashboard());
+}
+
+function renderCompareView(container) {
+  const defaultTo = state.selectedMonth || new Date().toISOString().slice(0, 7);
+  const fromDate = new Date(`${defaultTo}-01T00:00`);
+  fromDate.setMonth(fromDate.getMonth() - 1);
+  const defaultFrom = fromDate.toISOString().slice(0, 7);
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Usporedba mjeseci</h2>
+      <div class="actions">
+        <label>Od:<input type="month" id="cmpFrom" value="${defaultFrom}"></label>
+        <label>Do:<input type="month" id="cmpTo" value="${defaultTo}"></label>
+        <button id="cmpSwap" type="button" class="btn btn-secondary">Zamijeni</button>
+        <button id="cmpBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <div class="chart-canvas"><canvas id="cmpChart" height="380"></canvas></div>
+    <div id="cmpStats" class="stats"></div>
+  `;
+  const fromInput = container.querySelector('#cmpFrom');
+  const toInput = container.querySelector('#cmpTo');
+  const swapBtn = container.querySelector('#cmpSwap');
+  const backBtn = container.querySelector('#cmpBackHome');
+  const statsEl = container.querySelector('#cmpStats');
+  const ctx = container.querySelector('#cmpChart').getContext('2d');
+
+  const monthStats = month => {
+    const txs = filterByMonth(state.transactions, month);
+    const incomes = sumByType(txs, 'income') / 100;
+    const expenses = sumByType(txs, 'expense') / 100;
+    return { incomes, expenses, balance: incomes - expenses };
+  };
+
+  const updateChart = () => {
+    const fromMonth = fromInput.value;
+    const toMonth = toInput.value;
+    if (!fromMonth || !toMonth) return;
+    const from = monthStats(fromMonth);
+    const to = monthStats(toMonth);
+    const labels = [
+      new Date(`${fromMonth}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' }),
+      new Date(`${toMonth}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' })
+    ];
+    if (state.compareChart) {
+      state.compareChart.destroy();
+      state.compareChart = null;
+    }
+    state.compareChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Prihodi',
+            data: [from.incomes, to.incomes],
+            backgroundColor: '#16a34a'
+          },
+          {
+            label: 'Troškovi',
+            data: [from.expenses, to.expenses],
+            backgroundColor: '#dc2626'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' }
+        },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+    const base = from.balance;
+    const diff = to.balance - base;
+    const change = base === 0 ? (to.balance === 0 ? 0 : 100) : (diff / Math.abs(base)) * 100;
+    statsEl.textContent = `Saldo Od: ${from.balance.toFixed(2)} € · Saldo Do: ${to.balance.toFixed(2)} € · Promjena: ${change.toFixed(1)}%`;
+  };
+
+  swapBtn.addEventListener('click', () => {
+    const temp = fromInput.value;
+    fromInput.value = toInput.value;
+    toInput.value = temp;
+    updateChart();
+  });
+  fromInput.addEventListener('change', updateChart);
+  toInput.addEventListener('change', updateChart);
+  backBtn.addEventListener('click', () => showDashboard());
+  updateChart();
+}
+
+function renderAnalysisView(container) {
+  const activeMonth = state.selectedMonth || new Date().toISOString().slice(0, 7);
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Analiza kategorija — <span id="anMonthLabel"></span></h2>
+      <div class="actions">
+        <input type="month" id="anMonth" value="${activeMonth}">
+        <select id="anType">
+          <option value="expense">Troškovi</option>
+          <option value="income">Prihodi</option>
+        </select>
+        <button id="anBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <table id="anTable" class="table">
+      <thead><tr><th data-sort="category">Kategorija</th><th data-sort="count">Broj</th><th data-sort="avg">Prosjek (€)</th><th data-sort="total">Ukupno (€)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  `;
+  const monthInput = container.querySelector('#anMonth');
+  const typeSelect = container.querySelector('#anType');
+  const backBtn = container.querySelector('#anBackHome');
+  const label = container.querySelector('#anMonthLabel');
+  const tbody = container.querySelector('#anTable tbody');
+  let sortKey = 'total';
+  let sortDir = 'desc';
+
+  const buildData = (month, type) => {
+    const txs = filterByMonth(state.transactions, month);
+    const rows = new Map();
+    txs.forEach(tx => {
+      if (isTransfer(tx) || tx.type !== type) return;
+      splitEntries(tx).forEach(entry => {
+        if (!entry.category) return;
+        const current = rows.get(entry.category) || { category: entry.category, count: 0, total: 0 };
+        current.count += 1;
+        current.total += entry.amountCents || 0;
+        rows.set(entry.category, current);
+      });
+    });
+    return Array.from(rows.values()).map(row => ({
+      category: row.category,
+      count: row.count,
+      total: row.total / 100,
+      avg: row.count > 0 ? (row.total / row.count) / 100 : 0
+    }));
+  };
+
+  const renderTable = () => {
+    const month = monthInput.value || activeMonth;
+    const type = typeSelect.value;
+    label.textContent = new Date(`${month}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+    const data = buildData(month, type);
+    const sorted = data.sort((a, b) => {
+      const direction = sortDir === 'asc' ? 1 : -1;
+      switch (sortKey) {
+        case 'category':
+          return a.category.localeCompare(b.category) * direction;
+        case 'count':
+          return (a.count - b.count) * direction;
+        case 'avg':
+          return (a.avg - b.avg) * direction;
+        case 'total':
+        default:
+          return (a.total - b.total) * direction;
+      }
+    });
+    tbody.innerHTML = '';
+    if (sorted.length === 0) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      cell.className = 'muted';
+      cell.textContent = 'Nema podataka za odabrani mjesec.';
+      row.appendChild(cell);
+      tbody.appendChild(row);
+      return;
+    }
+    sorted.forEach(item => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${item.category}</td>
+        <td>${item.count}</td>
+        <td class="align-right">${item.avg.toFixed(2)}</td>
+        <td class="align-right">${item.total.toFixed(2)}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  };
+
+  container.querySelectorAll('#anTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (sortKey === key) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortKey = key;
+        sortDir = key === 'category' ? 'asc' : 'desc';
+      }
+      renderTable();
+    });
+  });
+
+  monthInput.addEventListener('change', renderTable);
+  typeSelect.addEventListener('change', renderTable);
+  backBtn.addEventListener('click', () => showDashboard());
+  renderTable();
+}
+
+function renderLogView(container) {
+  const entries = [...getLogList()].sort((a, b) => new Date(b.ts || 0) - new Date(a.ts || 0));
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Log aktivnosti</h2>
+      <div class="actions">
+        <button id="logClear" type="button" class="btn btn-secondary">Očisti log</button>
+        <button id="logBackHome" type="button" class="btn btn-secondary">Početna</button>
+      </div>
+    </div>
+    <table id="logTable" class="table">
+      <thead><tr><th>Vrijeme</th><th>Tip</th><th>Detalji</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  `;
+  const tbody = container.querySelector('#logTable tbody');
+  const clearBtn = container.querySelector('#logClear');
+  const backBtn = container.querySelector('#logBackHome');
+  if (entries.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.className = 'muted';
+    cell.textContent = 'Još nema zapisa u logu.';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+  } else {
+    entries.forEach(entry => {
+      const row = document.createElement('tr');
+      const timeCell = document.createElement('td');
+      timeCell.textContent = entry.ts ? new Date(entry.ts).toLocaleString('hr-HR') : '';
+      const typeCell = document.createElement('td');
+      typeCell.textContent = entry.type || '';
+      const metaCell = document.createElement('td');
+      metaCell.textContent = entry.meta ? JSON.stringify(entry.meta) : '';
+      row.append(timeCell, typeCell, metaCell);
+      tbody.appendChild(row);
+    });
+  }
+  clearBtn.addEventListener('click', () => {
+    if (!confirm('Očistiti log aktivnosti?')) return;
+    clearLog();
+    renderLogView(container);
+  });
+  backBtn.addEventListener('click', () => showDashboard());
 }
 
 function bindUI() {
@@ -1850,6 +2871,7 @@ async function initApp() {
   applyDarkMode(state.settings.darkMode);
 
   await requirePINOnStartup();
+  addLog('LOGIN', { method: state.settings.pinHash ? 'pin' : 'none' });
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const month = state.settings.lastMonth || currentMonth;
@@ -1866,11 +2888,14 @@ async function initApp() {
 
   document.getElementById('monthPicker').addEventListener('change', event => {
     setSelectedMonth(event.target.value);
+    state.calendarMonth = state.selectedMonth;
     syncHistoryDateForMonth();
     renderKPIs();
     renderCategoryChart();
+    renderBudgets();
     renderHistoryDay();
     warnIfBudgetHit();
+    maybePromptRecurring();
   });
 
   updateFiltersForm();
@@ -1885,6 +2910,7 @@ async function initApp() {
   renderHistoryDay();
   maybeOfferWeeklyBackup();
   warnIfBudgetHit();
+  maybePromptRecurring();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

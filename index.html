@@ -29,11 +29,33 @@
         <button id="moreMenuBtn" class="icon-btn" aria-haspopup="menu" aria-expanded="false" title="Napredno">⚙️</button>
         <div id="moreMenu" class="menu advanced-menu" role="menu" hidden>
           <div class="group">
+            <button id="goHome" role="menuitem">Početna stranica</button>
+          </div>
+          <div class="group">
             <div class="group-title">Podaci</div>
             <button id="openFilterDrawer" role="menuitem">Filteri i pretraga…</button>
             <button id="btnExportCSV" role="menuitem">CSV izvoz (mjesec)</button>
-            <button id="btnExportPDF" role="menuitem">PDF izvještaj (mjesec)</button>
+            <button id="btnExportPDF" role="menuitem">PDF izvještaj (zadani stil)</button>
             <label class="menu-switch" role="menuitem"><input type="checkbox" id="backupToggle"> Automatski backup (tjedno)</label>
+          </div>
+          <div class="group">
+            <div class="group-title">PDF izvještaji</div>
+            <button id="btnExportPDFModern" role="menuitem">PDF izvještaj — Moderni</button>
+            <button id="btnExportPDFClassic" role="menuitem">PDF izvještaj — Klasični (stari)</button>
+            <label class="menu-switch" role="menuitem">
+              <span>Zadani stil</span>
+              <select id="pdfDefaultStyle">
+                <option value="modern">Moderni</option>
+                <option value="classic">Klasični</option>
+              </select>
+            </label>
+          </div>
+          <div class="group">
+            <div class="group-title">Analitika i alati</div>
+            <button id="openCalendar" role="menuitem">Kalendar troškova</button>
+            <button id="openCompare" role="menuitem">Mjesečna usporedba</button>
+            <button id="openAnalysis" role="menuitem">Analiza kategorija</button>
+            <button id="openLog" role="menuitem">Log aktivnosti</button>
           </div>
           <div class="group">
             <div class="group-title">Planiranje</div>
@@ -54,12 +76,18 @@
             <button id="openShortcuts" role="menuitem">Tipkovničke kratice</button>
             <button id="openAbout" role="menuitem">O aplikaciji</button>
           </div>
+          <div class="group">
+            <div class="group-title">Sigurnost i reset</div>
+            <button id="wipeAll" role="menuitem">Izbriši sve podatke…</button>
+          </div>
         </div>
       </div>
     </header>
 
     <input type="file" id="importFile" accept="application/json" hidden>
 
+    <div id="dashboard">
+    <div id="bannerStack" aria-live="polite" aria-atomic="false"></div>
     <section class="kpis" aria-label="Sažetak financija">
       <article id="card-incomes" class="kpi-card" tabindex="0" aria-live="polite">
         <h3>Prihodi</h3>
@@ -193,6 +221,9 @@
         </table>
       </div>
     </section>
+    </div>
+
+    <section id="fullView" hidden aria-live="polite"></section>
   </div>
 
   <div id="toast" role="status" aria-live="polite" hidden>Transakcija dodana</div>

@@ -2,321 +2,117 @@
 <html lang="hr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Financijski tracker</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
-    <div id="auth-overlay" class="auth-overlay" role="dialog" aria-modal="true" hidden>
-      <div class="auth-card">
-        <div class="auth-tabs">
-          <button class="auth-tab is-active" data-target="login">Prijava</button>
-          <button class="auth-tab" data-target="register">Registracija</button>
-        </div>
-        <div class="auth-panel" id="panel-login">
-          <h2>Prijava</h2>
-          <p class="muted">Odaberite račun spremljen na ovom uređaju ili uvezite datoteku.</p>
-          <form id="local-login-form" class="stack">
-            <label for="local-account-select">Račun na ovom računalu</label>
-            <select id="local-account-select"></select>
-            <label for="local-pin">PIN (4 znamenke)</label>
-            <input id="local-pin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="current-password" />
-            <button type="submit" class="btn primary">Prijavi se</button>
-            <button type="button" id="remove-local-account" class="btn danger" hidden>Obriši lokalni račun</button>
-          </form>
-          <hr />
-          <form id="file-login-form" class="stack" enctype="multipart/form-data">
-            <label for="account-file">Prijava pomoću datoteke</label>
-            <input id="account-file" type="file" accept="application/json" />
-            <label for="file-pin">PIN (4 znamenke)</label>
-            <input id="file-pin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" autocomplete="current-password" />
-            <button type="submit" class="btn">Uvezi i prijavi se</button>
-          </form>
-          <p id="login-feedback" class="feedback" role="status"></p>
-        </div>
-        <div class="auth-panel" id="panel-register" hidden>
-          <h2>Registracija</h2>
-          <form id="register-form" class="stack">
-            <fieldset class="stack">
-              <legend>Vrsta računa</legend>
-              <label class="radio"><input type="radio" name="accountType" value="personal" checked /> Osobni</label>
-              <label class="radio"><input type="radio" name="accountType" value="family" /> Obiteljski</label>
-              <label class="radio"><input type="radio" name="accountType" value="business" /> Poslovni</label>
-            </fieldset>
-            <div class="grid two" id="personal-fields">
-              <label>Ime<input name="firstName" required /></label>
-              <label>Prezime<input name="lastName" required /></label>
-              <label>Email<input name="email" type="email" required /></label>
-              <label>Datum rođenja<input name="dob" type="date" required /></label>
-              <label class="full">Adresa<input name="address" required /></label>
-            </div>
-            <div class="stack" id="family-fields" hidden>
-              <label>Naziv kućanstva<input name="householdName" /></label>
-            </div>
-            <div class="grid two" id="business-fields" hidden>
-              <label class="full">Naziv tvrtke<input name="companyName" /></label>
-              <label>OIB<input name="oib" /></label>
-              <label>Sjedište<input name="headquarters" /></label>
-              <label>IBAN<input name="iban" /></label>
-              <label>PDV obveznik<select name="vatPayer"><option value="false">Ne</option><option value="true">Da</option></select></label>
-              <label>Kontakt osoba<input name="contactPerson" /></label>
-            </div>
-            <div class="grid two">
-              <label>PIN (4 znamenke)<input name="pin" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" required /></label>
-              <label>Potvrdite PIN<input name="pinConfirm" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" required /></label>
-            </div>
-            <label class="checkbox">
-              <input type="checkbox" name="ageConfirm" /> Potvrđujem da imam najmanje 16 godina.
-            </label>
-            <button type="submit" class="btn primary">Kreiraj račun</button>
-          </form>
-          <p class="muted small">Nakon registracije preuzmite sigurnosnu datoteku i spremite je na sigurno mjesto.</p>
-          <p id="register-feedback" class="feedback" role="status"></p>
-        </div>
+    <header class="app-header">
+      <div>
+        <h1>Financijski tracker</h1>
+        <p class="subtitle">Jednostavna kućna bilježnica za prihode i troškove.</p>
       </div>
-    </div>
+      <label class="month-picker" for="month-select">
+        <span>Mjesec</span>
+        <input type="month" id="month-select" />
+      </label>
+    </header>
 
-    <div class="layout">
-      <aside class="sidebar">
-        <div class="brand">Financijski tracker</div>
-        <div class="month-switcher">
-          <label for="month-select">Mjesec</label>
-          <input id="month-select" type="month" />
-          <form id="budget-form" class="budget-form">
-            <label for="budget-amount">Budžet (€)</label>
-            <div class="budget-input">
-              <input id="budget-amount" type="number" min="0" step="0.01" />
-              <button type="submit" class="btn small">Spremi</button>
-            </div>
-            <div id="budget-progress" class="budget-progress" aria-live="polite"></div>
-          </form>
-        </div>
-        <nav class="nav">
-          <button class="nav-button is-active" data-view="home">Početna</button>
-          <button class="nav-button" data-view="manual">Nova stavka</button>
-          <button class="nav-button" data-view="history">Povijest</button>
-          <button class="nav-button" data-view="report">Izvještaj</button>
-          <button class="nav-button" data-view="settings">Postavke</button>
-        </nav>
-      </aside>
-      <main class="main">
-        <header class="topbar">
-          <h1 id="view-title">Početna</h1>
-          <div class="topbar-actions">
-            <button id="download-backup" class="btn">Preuzmi kopiju</button>
-            <div class="user-menu">
-              <button id="user-menu-toggle" class="user-button" aria-haspopup="menu" aria-expanded="false">
-                <span class="sr-only">Korisnički izbornik</span>
-              </button>
-              <div id="user-dropdown" class="user-dropdown" hidden>
-                <button data-action="profile">Osobni podaci</button>
-                <button data-action="logout">Odjava</button>
-                <button data-action="delete" class="danger">Obriši sve podatke</button>
-              </div>
-            </div>
-          </div>
-        </header>
+    <main class="app-main">
+      <section class="cards" aria-label="Sažeci">
+        <article class="card summary" aria-live="polite">
+          <h2>Prihodi</h2>
+          <p id="income-total" class="big-number">€ 0,00</p>
+        </article>
+        <article class="card summary" aria-live="polite">
+          <h2>Troškovi</h2>
+          <p id="expense-total" class="big-number">€ 0,00</p>
+        </article>
+        <article class="card summary" aria-live="polite">
+          <h2>Saldo</h2>
+          <p id="balance-total" class="big-number">€ 0,00</p>
+        </article>
+      </section>
 
-        <section id="view-home" class="view">
-          <div id="budget-alert" class="alert" hidden></div>
-          <div class="cards">
-            <article class="card">
-              <h2>Prihodi</h2>
-              <p id="income-total" class="big-number">€ 0,00</p>
-            </article>
-            <article class="card">
-              <h2>Troškovi</h2>
-              <p id="expense-total" class="big-number">€ 0,00</p>
-            </article>
-            <article class="card">
-              <h2>Saldo</h2>
-              <p id="balance-total" class="big-number">€ 0,00</p>
-            </article>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <h2>Graf</h2>
-              <div class="chart-toggle" role="radiogroup" aria-label="Tip grafa">
-                <button type="button" class="chart-pill is-active" data-chart="pie">Kružni</button>
-                <button type="button" class="chart-pill" data-chart="line">Linijski</button>
-                <button type="button" class="chart-pill" data-chart="bar">Stupčasti</button>
-              </div>
-            </div>
-            <canvas id="overview-chart" height="320"></canvas>
-          </div>
-          <div class="card">
-            <header class="card-header">
-              <h2>Stavke u mjesecu</h2>
-            </header>
-            <table class="table">
-              <thead>
-                <tr><th>Datum</th><th>Tip</th><th>Naziv</th><th>Kategorija</th><th class="align-right">Iznos (€)</th><th></th></tr>
-              </thead>
-              <tbody id="transaction-body"></tbody>
-            </table>
-          </div>
-        </section>
+      <div id="alert" class="alert" role="alert" hidden></div>
 
-        <section id="view-manual" class="view" hidden>
-          <div class="card">
-            <h2>Nova stavka</h2>
-            <form id="transaction-form" class="stack">
-              <label>Tip<select name="type" required><option value="income">Prihod</option><option value="expense">Trošak</option></select></label>
-              <label>Naziv<input name="title" required /></label>
-              <label>Kategorija<select name="category" id="category-options"></select></label>
-              <label>Iznos (€)<input name="amount" type="number" step="0.01" min="0" required /></label>
-              <label>Datum<input name="date" type="date" required /></label>
-              <label>Bilješka<textarea name="note" rows="2"></textarea></label>
-              <button type="submit" class="btn primary">Spremi</button>
-              <p id="form-feedback" class="feedback" role="status"></p>
-            </form>
+      <section class="content-row">
+        <form id="transaction-form" class="card form" autocomplete="off">
+          <h2>Nova transakcija</h2>
+          <div class="field">
+            <label for="type">Tip</label>
+            <select id="type" name="type" required>
+              <option value="income">Prihod</option>
+              <option value="expense" selected>Trošak</option>
+            </select>
           </div>
-        </section>
-
-        <section id="view-history" class="view" hidden>
-          <div class="card">
-            <h2>Filtri</h2>
-            <form id="filter-form" class="filters">
-              <label>Od<input type="date" name="from" /></label>
-              <label>Do<input type="date" name="to" /></label>
-              <label>Kategorija<select name="category"></select></label>
-              <label>Tip<select name="type"><option value="">Sve</option><option value="income">Prihodi</option><option value="expense">Troškovi</option></select></label>
-              <button type="submit" class="btn">Primijeni</button>
-              <button type="button" id="filter-reset" class="btn ghost">Poništi</button>
-            </form>
-            <div id="history-calendar" class="calendar"></div>
-            <table class="table">
-              <thead>
-                <tr><th>Datum</th><th>Tip</th><th>Naziv</th><th>Kategorija</th><th class="align-right">Iznos (€)</th></tr>
-              </thead>
-              <tbody id="history-body"></tbody>
-            </table>
+          <div class="field">
+            <label for="title">Naziv</label>
+            <input id="title" name="title" type="text" required placeholder="npr. Mirovina" />
           </div>
-        </section>
-
-        <section id="view-report" class="view" hidden>
-          <div class="card statement">
-            <header class="card-header">
-              <div>
-                <h2>MJESEČNI IZVADAK / RAČUN</h2>
-                <p id="statement-period"></p>
-              </div>
-              <button id="print-button" class="btn">Ispiši / PDF</button>
-            </header>
-            <form id="statement-form" class="grid two">
-              <fieldset class="stack">
-                <legend>Izdavatelj</legend>
-                <label>Naziv<input name="issuerName" required /></label>
-                <label>Adresa<input name="issuerAddress" /></label>
-                <label>OIB<input name="issuerOib" /></label>
-              </fieldset>
-              <fieldset class="stack">
-                <legend>Primatelj</legend>
-                <label>Ime i prezime / naziv<input name="recipientName" /></label>
-                <label>Adresa<input name="recipientAddress" /></label>
-                <label>Mjesto izdavanja<input name="place" /></label>
-              </fieldset>
-            </form>
-            <div class="statement-preview">
-              <div class="statement-row">
-                <div>
-                  <strong>Izdavatelj:</strong>
-                  <p id="preview-issuer"></p>
-                </div>
-                <div>
-                  <strong>Primatelj:</strong>
-                  <p id="preview-recipient"></p>
-                </div>
-              </div>
-              <table class="table summary-table">
-                <thead>
-                  <tr><th>Prihodi (€)</th><th>Troškovi (€)</th><th>Saldo (€)</th></tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td id="summary-income"></td>
-                    <td id="summary-expense"></td>
-                    <td id="summary-balance"></td>
-                  </tr>
-                </tbody>
-              </table>
-              <table class="table">
-                <thead>
-                  <tr><th>Datum</th><th>Tip</th><th>Naziv</th><th>Kategorija</th><th class="align-right">Iznos (€)</th></tr>
-                </thead>
-                <tbody id="statement-body"></tbody>
-              </table>
-              <p id="statement-note" class="muted small"></p>
-              <p id="statement-place-date" class="muted"></p>
-              <p class="signature-line">Potpis: _________________________</p>
-            </div>
-            <p id="statement-feedback" class="feedback" role="status"></p>
+          <div class="field">
+            <label for="category">Kategorija</label>
+            <input id="category" name="category" list="category-options" required placeholder="npr. Hrana" />
+            <datalist id="category-options">
+              <option value="Mirovina"></option>
+              <option value="Plaća"></option>
+              <option value="Hrana"></option>
+              <option value="Režije"></option>
+              <option value="Auto"></option>
+              <option value="Lijekovi"></option>
+              <option value="Prijevoz"></option>
+              <option value="Darovi"></option>
+            </datalist>
           </div>
-        </section>
-
-        <section id="view-settings" class="view" hidden>
-          <div class="card">
-            <h2>Kategorije</h2>
-            <form id="category-form" class="inline-form">
-              <input id="new-category" placeholder="Dodaj kategoriju" />
-              <button type="submit" class="btn">Dodaj</button>
-            </form>
-            <ul id="category-list" class="pill-list"></ul>
+          <div class="field">
+            <label for="amount">Iznos (€)</label>
+            <input id="amount" name="amount" type="number" step="0.01" min="0" required placeholder="npr. 25.00" />
           </div>
-          <div class="card">
-            <h2>Postavke</h2>
-            <label class="checkbox">
-              <input id="setting-save-images" type="checkbox" /> Ne spremaj fotografije nakon očitanja
-            </label>
-            <label>Valuta<select id="setting-currency"><option value="EUR">EUR</option><option value="USD">USD</option></select></label>
+          <div class="field">
+            <label for="date">Datum</label>
+            <input id="date" name="date" type="date" required />
           </div>
-        </section>
-
-        <section id="view-profile" class="view" hidden>
-          <div class="card">
-            <h2>Osobni podaci</h2>
-            <form id="profile-form" class="grid two">
-              <label>Ime<input id="profile-first-name" name="firstName" /></label>
-              <label>Prezime<input id="profile-last-name" name="lastName" /></label>
-              <label>Datum rođenja<input id="profile-dob" name="dob" type="date" /></label>
-              <label class="full">Adresa<input id="profile-address" name="address" /></label>
-              <label class="full">E-mail<input id="profile-email" name="email" type="email" disabled /></label>
-              <label class="full">Vrsta računa<input id="account-type-value" disabled /></label>
-              <label class="full">Naziv računa<input id="account-name-value" /></label>
-            </form>
-            <div id="business-info" class="business-info" hidden></div>
-            <button type="button" id="profile-save" class="btn primary">Spremi promjene</button>
-            <p id="profile-feedback" class="feedback" role="status"></p>
+          <div class="field">
+            <label for="note">Bilješka <span class="muted">(opcionalno)</span></label>
+            <textarea id="note" name="note" rows="2" placeholder="Kratki podsjetnik"></textarea>
           </div>
-        </section>
-      </main>
-    </div>
-
-    <div id="confirm-dialog" class="modal" hidden>
-      <div class="modal-card">
-        <h2>Potvrda</h2>
-        <p id="confirm-text"></p>
-        <div class="modal-actions">
-          <button id="confirm-cancel" class="btn">Odustani</button>
-          <button id="confirm-approve" class="btn danger">Potvrdi</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="delete-account-dialog" class="modal" hidden>
-      <div class="modal-card">
-        <h2>Obriši sve podatke</h2>
-        <p>Ova radnja trajno briše sve podatke (račun, transakcije, budžete). Ako ste sigurni, upišite <strong>OBRIŠI</strong>.</p>
-        <form id="delete-account-form" class="stack">
-          <input id="delete-confirm-input" />
-          <div class="modal-actions">
-            <button type="button" id="delete-cancel" class="btn">Odustani</button>
-            <button type="submit" class="btn danger">Potvrdi</button>
-          </div>
+          <button type="submit" class="btn primary">Spremi</button>
         </form>
-      </div>
-    </div>
+
+        <section class="card graphs" aria-label="Grafovi">
+          <h2>Grafovi</h2>
+          <div class="chart-block">
+            <h3>Potrošnja po kategorijama</h3>
+            <canvas id="pie-chart" height="280"></canvas>
+          </div>
+          <div class="chart-block">
+            <h3>Trend prihoda i troškova</h3>
+            <canvas id="line-chart" height="280"></canvas>
+          </div>
+        </section>
+      </section>
+
+      <section class="card table-card" aria-label="Transakcije">
+        <div class="table-header">
+          <h2>Transakcije u mjesecu</h2>
+          <p class="muted">Prikazano za odabrani mjesec. Najnovije su na vrhu.</p>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Datum</th>
+              <th scope="col">Tip</th>
+              <th scope="col">Naziv</th>
+              <th scope="col">Kategorija</th>
+              <th scope="col" class="align-right">Iznos (€)</th>
+              <th scope="col" class="align-center">Brisanje</th>
+            </tr>
+          </thead>
+          <tbody id="transaction-body"></tbody>
+        </table>
+      </section>
+    </main>
   </body>
 </html>

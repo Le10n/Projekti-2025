@@ -22,6 +22,11 @@ const DEFAULT_EXCHANGE_RATES = {
   HRK: 7.5345
 };
 
+const DEFAULT_MARKETS_WATCHLIST = [
+  { sym: 'BINANCE:BTCUSDT', title: 'Bitcoin (BTC)' },
+  { sym: 'OANDA:XAUUSD', title: 'Zlato (XAUUSD)' }
+];
+
 const MAX_LOG_ENTRIES = 1000;
 
 const DEFAULT_SETTINGS = {
@@ -39,6 +44,7 @@ const DEFAULT_SETTINGS = {
   recurring: [],
   log: [],
   exchangeRates: { ...DEFAULT_EXCHANGE_RATES },
+  marketsWatchlist: structuredClone(DEFAULT_MARKETS_WATCHLIST),
   pdfStyle: 'modern',
   recurringApplied: {}
 };
@@ -72,6 +78,8 @@ const state = {
   recurringPromptOpen: false
 };
 
+let tvScriptLoaded = false;
+
 const CenterNoDataPlugin = {
   id: 'centerNoData',
   beforeDraw(chart, args, options) {
@@ -92,6 +100,24 @@ const CenterNoDataPlugin = {
     ctx.restore();
   }
 };
+
+function ensureTradingViewScript() {
+  return new Promise((resolve, reject) => {
+    if (tvScriptLoaded || window.TradingView) {
+      tvScriptLoaded = true;
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.onload = () => {
+      tvScriptLoaded = true;
+      resolve(true);
+    };
+    script.onerror = err => reject(err);
+    document.head.appendChild(script);
+  });
+}
 
 function getLogList() {
   if (!Array.isArray(state.settings.log)) {
@@ -196,6 +222,10 @@ function loadSettings() {
       settings.budgets = normalizedBudgets;
     } else {
       settings.budgets = {};
+    }
+    if (!Array.isArray(settings.marketsWatchlist)) {
+      settings.marketsWatchlist = structuredClone(DEFAULT_MARKETS_WATCHLIST);
+      migrated = true;
     }
     if (migrated) {
       localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
@@ -1646,6 +1676,9 @@ async function importAccount(file) {
     ...payload.settings,
     filters: { ...state.settings.filters, ...(payload.settings?.filters || {}) }
   };
+  if (!Array.isArray(state.settings.marketsWatchlist)) {
+    state.settings.marketsWatchlist = structuredClone(DEFAULT_MARKETS_WATCHLIST);
+  }
   saveSettings(state.settings);
   applyDarkMode(state.settings.darkMode);
   renderAccountsSelects();
@@ -2034,6 +2067,7 @@ function setupMenus() {
   document.getElementById('openCalendar')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCalendarView)));
   document.getElementById('openCompare')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCompareView)));
   document.getElementById('openAnalysis')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderAnalysisView)));
+  document.getElementById('openMarkets')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderMarketsView)));
   document.getElementById('backupToggle')?.addEventListener('change', event => {
     state.settings.weeklyBackup = event.target.checked;
     saveSettings(state.settings);
@@ -2098,6 +2132,127 @@ function showFullView(renderer) {
   }
 }
 
+
+
+async function renderMarketsView(container) {
+  container.innerHTML = `
+    <div class="view-head">
+      <h2>Crypto &amp; Metali — real-time grafikoni</h2>
+      <div class="actions">
+        <button id="mkBack" class="btn btn-secondary" type="button">Početna</button>
+      </div>
+    </div>
+
+    <div class="markets-toolbar">
+      <label>Dodaj simbol (TradingView)
+        <input id="mkSymbol" type="text" placeholder="npr. BINANCE:BTCUSDT ili OANDA:XAUUSD">
+      </label>
+      <input id="mkTitle" type="text" placeholder="Naslov (opcionalno): Bitcoin (BTC)">
+      <button id="mkAdd" type="button">Dodaj</button>
+    </div>
+
+    <div id="marketsGrid" class="markets-grid"></div>
+  `;
+
+  document.getElementById('mkBack').onclick = () => showDashboard();
+
+  const grid = document.getElementById('marketsGrid');
+
+  const renderGrid = async () => {
+    grid.innerHTML = '';
+    try {
+      await ensureTradingViewScript();
+    } catch (error) {
+      console.error('TradingView skripta nije učitana', error);
+      const errorCard = document.createElement('div');
+      errorCard.className = 'market-card';
+      errorCard.innerHTML = '<div class="card-head"><div class="title">Greška</div></div><div class="chart" role="status">Nije moguće učitati graf.</div>';
+      grid.appendChild(errorCard);
+      return;
+    }
+
+    const watchlist = Array.isArray(state.settings.marketsWatchlist)
+      ? state.settings.marketsWatchlist
+      : (state.settings.marketsWatchlist = structuredClone(DEFAULT_MARKETS_WATCHLIST));
+
+    watchlist.forEach((item, index) => {
+      const card = document.createElement('div');
+      card.className = 'market-card';
+      const widgetId = `tv_${Date.now()}_${index}_${Math.random().toString(16).slice(2)}`;
+      card.innerHTML = `
+        <div class="card-head">
+          <div class="title">${item.title ? item.title : item.sym}</div>
+          <div class="actions">
+            <button class="icon-link" data-action="pin" type="button" title="Prikvači na vrh">📌 Prikvači na vrh</button>
+            <button class="icon-link" data-action="remove" type="button" title="Obriši">🗑️ Obriši</button>
+          </div>
+        </div>
+        <div id="${widgetId}" class="chart"></div>
+      `;
+      grid.appendChild(card);
+
+      if (window.TradingView?.widget) {
+        new window.TradingView.widget({
+          container_id: widgetId,
+          autosize: true,
+          symbol: item.sym,
+          interval: '60',
+          timezone: 'Etc/UTC',
+          theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+          style: '1',
+          locale: 'hr',
+          hide_top_toolbar: true,
+          withdateranges: false,
+          allow_symbol_change: false,
+          save_image: false,
+          studies: []
+        });
+      }
+
+      card.querySelector('[data-action="pin"]').addEventListener('click', () => {
+        const current = state.settings.marketsWatchlist || [];
+        const [picked] = current.splice(index, 1);
+        current.unshift(picked);
+        saveSettings(state.settings);
+        renderGrid();
+      });
+
+      card.querySelector('[data-action="remove"]').addEventListener('click', () => {
+        const current = state.settings.marketsWatchlist || [];
+        current.splice(index, 1);
+        saveSettings(state.settings);
+        renderGrid();
+      });
+    });
+
+    if (watchlist.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'market-card';
+      empty.innerHTML = '<div class="card-head"><div class="title">Nema spremljenih simbola</div></div><div class="chart" role="status">Dodajte simbol da vidite graf.</div>';
+      grid.appendChild(empty);
+    }
+  };
+
+  document.getElementById('mkAdd').onclick = () => {
+    const symbolInput = document.getElementById('mkSymbol');
+    const titleInput = document.getElementById('mkTitle');
+    const sym = symbolInput.value.trim();
+    const title = titleInput.value.trim();
+    if (!sym) {
+      alert('Upiši TradingView simbol, npr. BINANCE:BTCUSDT');
+      symbolInput.focus();
+      return;
+    }
+    const list = state.settings.marketsWatchlist = state.settings.marketsWatchlist || [];
+    list.unshift({ sym, title });
+    saveSettings(state.settings);
+    symbolInput.value = '';
+    titleInput.value = '';
+    renderGrid();
+  };
+
+  await renderGrid();
+}
 
 function renderCalendarView(container) {
   const month = state.calendarMonth || state.selectedMonth || new Date().toISOString().slice(0, 7);

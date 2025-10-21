@@ -587,7 +587,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 14px;
   border-radius: 10px;
   border: 1px solid var(--border, #cbd5e1);
   background: var(--surface, #ffffff);
@@ -598,7 +598,8 @@ textarea {
   border: none;
   background: transparent;
   color: inherit;
-  padding: 0 6px;
+  padding: 0 10px;
+  min-width: 140px;
   height: 28px;
   line-height: 28px;
   outline: none;

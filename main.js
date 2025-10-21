@@ -2106,9 +2106,7 @@ function renderCalendarView(container) {
     <div class="view-head">
       <h2>Kalendar troškova — <span id="calMonthLabel"></span></h2>
       <div class="actions">
-        <button id="calPrev" type="button">◀</button>
         <input type="month" id="calMonth">
-        <button id="calNext" type="button">▶</button>
         <button id="calBackHome" type="button" class="btn btn-secondary">Početna</button>
       </div>
     </div>
@@ -2120,8 +2118,6 @@ function renderCalendarView(container) {
   const monthInput = container.querySelector('#calMonth');
   const monthLabel = container.querySelector('#calMonthLabel');
   const grid = container.querySelector('#calendarGrid');
-  const prevBtn = container.querySelector('#calPrev');
-  const nextBtn = container.querySelector('#calNext');
   const backBtn = container.querySelector('#calBackHome');
 
   const renderGrid = currentMonth => {
@@ -2215,16 +2211,6 @@ function renderCalendarView(container) {
   };
 
   setMonth(month);
-  prevBtn.addEventListener('click', () => {
-    const current = new Date(`${state.calendarMonth}-01T00:00`);
-    current.setMonth(current.getMonth() - 1);
-    setMonth(current.toISOString().slice(0, 7));
-  });
-  nextBtn.addEventListener('click', () => {
-    const current = new Date(`${state.calendarMonth}-01T00:00`);
-    current.setMonth(current.getMonth() + 1);
-    setMonth(current.toISOString().slice(0, 7));
-  });
   monthInput.addEventListener('change', event => setMonth(event.target.value));
   backBtn.addEventListener('click', () => showDashboard());
 }
@@ -2240,7 +2226,6 @@ function renderCompareView(container) {
       <div class="actions">
         <label>Od:<input type="month" id="cmpFrom" value="${defaultFrom}"></label>
         <label>Do:<input type="month" id="cmpTo" value="${defaultTo}"></label>
-        <button id="cmpSwap" type="button" class="btn btn-secondary">Zamijeni</button>
         <button id="cmpBackHome" type="button" class="btn btn-secondary">Početna</button>
       </div>
     </div>
@@ -2249,7 +2234,6 @@ function renderCompareView(container) {
   `;
   const fromInput = container.querySelector('#cmpFrom');
   const toInput = container.querySelector('#cmpTo');
-  const swapBtn = container.querySelector('#cmpSwap');
   const backBtn = container.querySelector('#cmpBackHome');
   const statsEl = container.querySelector('#cmpStats');
   const ctx = container.querySelector('#cmpChart').getContext('2d');
@@ -2332,12 +2316,6 @@ function renderCompareView(container) {
     statsEl.textContent = `Saldo Od: ${from.balance.toFixed(2)} € · Saldo Do: ${to.balance.toFixed(2)} € · Promjena: ${balanceChange.toFixed(1)}%`;
   };
 
-  swapBtn.addEventListener('click', () => {
-    const temp = fromInput.value;
-    fromInput.value = toInput.value;
-    toInput.value = temp;
-    updateChart();
-  });
   fromInput.addEventListener('change', updateChart);
   toInput.addEventListener('change', updateChart);
   backBtn.addEventListener('click', () => showDashboard());
@@ -2531,9 +2509,6 @@ function bindUI() {
     setHistoryDate(event.target.value);
     renderHistoryDay();
   });
-  document.getElementById('prevDay').addEventListener('click', () => navigateHistory(-1));
-  document.getElementById('nextDay').addEventListener('click', () => navigateHistory(1));
-
   document.getElementById('chartModeExpenses').addEventListener('click', () => switchChartMode('expense'));
   document.getElementById('chartModeIncomes').addEventListener('click', () => switchChartMode('income'));
   document.getElementById('chartModeTrend').addEventListener('click', () => switchChartMode('trend'));

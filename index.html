@@ -35,6 +35,16 @@
             <div class="group-title">Podaci</div>
             <button id="openFilterDrawer" role="menuitem">Filteri i pretraga…</button>
             <button id="btnExportCSV" role="menuitem">CSV izvoz (mjesec)</button>
+            <button id="openTaxRules" role="menuitem">Porezna pravila…</button>
+            <label class="menu-switch" role="menuitem">
+              <span>Valuta prikaza</span>
+              <select id="displayCurrencySelect">
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+                <option value="HRK">HRK</option>
+                <option value="BTC">BTC</option>
+              </select>
+            </label>
             <label class="menu-switch" role="menuitem"><input type="checkbox" id="backupToggle"> Automatski backup (tjedno)</label>
           </div>
           <div class="group">
@@ -94,6 +104,15 @@
       <article id="card-balance" class="kpi-card" tabindex="0" aria-live="polite">
         <h3>Saldo</h3>
         <div id="sumBalance">€ 0,00</div>
+        <p id="growthSummary" class="kpi-subtext">Prirast ulaganja (mj.): € 0,00</p>
+      </article>
+      <article id="card-savings" class="kpi-card" tabindex="0" aria-live="polite">
+        <h3>Stopa štednje</h3>
+        <div id="sumSavingsRate">0%</div>
+      </article>
+      <article id="card-networth" class="kpi-card" tabindex="0" aria-live="polite">
+        <h3>Neto vrijednost</h3>
+        <div id="sumNetWorth">€ 0,00</div>
       </article>
     </section>
 
@@ -107,6 +126,7 @@
               <option value="">-- Odaberite --</option>
               <option value="income">Prihod</option>
               <option value="expense">Trošak</option>
+              <option value="growth">Prirast</option>
             </select>
             <p class="error" data-error-for="txType"></p>
           </div>
@@ -123,7 +143,7 @@
             <p class="error" data-error-for="txCategory"></p>
           </div>
 
-          <div class="field">
+          <div class="field" data-field="account">
             <label for="txAccount">Račun</label>
             <select id="txAccount" required></select>
             <p class="error" data-error-for="txAccount"></p>
@@ -176,6 +196,7 @@
           <button id="chartModeExpenses" class="btn-toggle active" type="button" role="tab" aria-selected="true">Troškovi</button>
           <button id="chartModeIncomes" class="btn-toggle" type="button" role="tab" aria-selected="false">Prihodi</button>
           <button id="chartModeTrend" class="btn-toggle" type="button" role="tab" aria-selected="false">Trend</button>
+          <button id="chartModeBalance" class="btn-toggle" type="button" role="tab" aria-selected="false">Saldo</button>
         </div>
         <div class="chart-views">
           <div class="chart-canvas" data-view="doughnut">
@@ -183,6 +204,9 @@
           </div>
           <div class="chart-canvas" data-view="trend" hidden>
             <canvas id="trendChart" role="img" aria-label="Trend prihoda i troškova"></canvas>
+          </div>
+          <div class="chart-canvas" data-view="balance" hidden>
+            <canvas id="balanceChart" role="img" aria-label="Saldo kroz vrijeme"></canvas>
           </div>
         </div>
       </section>
@@ -203,7 +227,7 @@
               <th>Naziv</th>
               <th>Kategorija</th>
               <th>Račun</th>
-              <th class="align-right">Iznos (EUR)</th>
+              <th class="align-right">Iznos</th>
               <th class="time-col">Vrijeme</th>
               <th>Bilješka</th>
               <th>Akcije</th>
@@ -229,6 +253,7 @@
           <select id="editTxType" required>
             <option value="income">Prihod</option>
             <option value="expense">Trošak</option>
+            <option value="growth">Prirast</option>
             <option value="transfer">Transfer</option>
           </select>
           <p class="error" data-error-for="editTxType"></p>
@@ -243,7 +268,7 @@
           <input id="editTxCategory" type="text" required>
           <p class="error" data-error-for="editTxCategory"></p>
         </div>
-        <div class="field">
+        <div class="field" data-field="edit-account">
           <label for="editTxAccount">Račun</label>
           <select id="editTxAccount" required></select>
           <p class="error" data-error-for="editTxAccount"></p>
@@ -303,6 +328,7 @@
             <option value="income">Prihodi</option>
             <option value="expense">Troškovi</option>
             <option value="transfer">Transferi</option>
+            <option value="growth">Prirast</option>
           </select>
         </div>
         <div class="field">
@@ -361,7 +387,40 @@
         <div id="budgetsList" class="budget-list"></div>
         <form id="budgetForm" class="inline-form">
           <input id="budgetCategory" type="text" placeholder="Kategorija" required>
-          <input id="budgetAmount" type="number" step="0.01" placeholder="Limit (EUR)" required>
+          <input id="budgetAmount" type="number" step="0.01" placeholder="Limit" required>
+          <button type="submit" class="btn btn-primary">Dodaj/Spremi</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="taxRulesModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="taxRulesTitle">
+    <div class="dialog">
+      <header class="modal-head">
+        <h2 id="taxRulesTitle">Porezna pravila</h2>
+        <button type="button" class="btn-close" data-close="#taxRulesModal">✕</button>
+      </header>
+      <div class="modal-body">
+        <div id="taxRulesList" class="tax-rules-list"></div>
+        <form id="taxRuleForm" class="stacked-form">
+          <div class="field">
+            <label for="taxRuleName">Naziv</label>
+            <input id="taxRuleName" type="text" required>
+          </div>
+          <div class="field">
+            <label for="taxRuleScope">Primjenjuje se na</label>
+            <select id="taxRuleScope">
+              <option value="income">Prihodi</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="taxRuleRate">Stopa (%)</label>
+            <input id="taxRuleRate" type="number" min="0" step="0.01" required>
+          </div>
+          <div class="field">
+            <label for="taxRuleCategories">Kategorije (zarezom odvojene)</label>
+            <input id="taxRuleCategories" type="text" placeholder="npr. Plaća, Freelance">
+          </div>
           <button type="submit" class="btn btn-primary">Dodaj/Spremi</button>
         </form>
       </div>
@@ -403,7 +462,7 @@
             <select id="recurringAccount" required></select>
           </div>
           <div class="field">
-            <label for="recurringAmount">Iznos (EUR)</label>
+            <label for="recurringAmount">Iznos</label>
             <input id="recurringAmount" type="number" step="0.01" required>
           </div>
           <div class="field">
@@ -462,6 +521,10 @@
             <label for="accountCurrency">Valuta</label>
             <input id="accountCurrency" type="text" value="EUR" required>
           </div>
+          <div class="field">
+            <label for="accountOpening">Početno stanje</label>
+            <input id="accountOpening" type="number" step="0.01" value="0">
+          </div>
           <label class="menu-switch"><input type="checkbox" id="accountHidden"> Sakrij račun</label>
           <button type="submit" class="btn btn-primary">Spremi račun</button>
         </form>
@@ -485,7 +548,7 @@
           <select id="transferTo" required></select>
         </div>
         <div class="field">
-          <label for="transferAmount">Iznos (EUR)</label>
+          <label for="transferAmount">Iznos</label>
           <input id="transferAmount" type="number" step="0.01" required>
         </div>
         <div class="field">

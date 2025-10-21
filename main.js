@@ -18,8 +18,10 @@ const DEFAULT_FILTERS = {
 };
 
 const DEFAULT_EXCHANGE_RATES = {
+  EUR: 1,
   USD: 1.08,
-  HRK: 7.5345
+  HRK: 7.5345,
+  BTC: 65000
 };
 
 const DEFAULT_MARKETS_WATCHLIST = [
@@ -39,6 +41,7 @@ const DEFAULT_SETTINGS = {
   pinHash: '',
   accounts: [],
   defaultAccountId: '',
+  displayCurrency: 'EUR',
   filters: { ...DEFAULT_FILTERS },
   goals: [],
   recurring: [],
@@ -46,6 +49,7 @@ const DEFAULT_SETTINGS = {
   exchangeRates: { ...DEFAULT_EXCHANGE_RATES },
   marketsWatchlist: structuredClone(DEFAULT_MARKETS_WATCHLIST),
   pdfStyle: 'modern',
+  taxRules: [],
   recurringApplied: {}
 };
 
@@ -70,6 +74,7 @@ const state = {
   chartMode: 'expense',
   categoryChart: null,
   trendChart: null,
+  balanceChart: null,
   compareChart: null,
   editingId: null,
   calendarMonth: '',
@@ -153,8 +158,65 @@ function uuid() {
 
 const sum = arr => arr.reduce((a, b) => a + b, 0);
 
-function formatCurrencyHR(cents) {
-  return new Intl.NumberFormat('hr-HR', { style: 'currency', currency: 'EUR' }).format((cents || 0) / 100);
+function getDisplayCurrency() {
+  return state.settings.displayCurrency || 'EUR';
+}
+
+function getExchangeRates() {
+  const rates = state.settings.exchangeRates || {};
+  return { ...DEFAULT_EXCHANGE_RATES, ...rates };
+}
+
+function formatCurrency(cents, currency = getDisplayCurrency()) {
+  const value = (cents || 0) / 100;
+  try {
+    return new Intl.NumberFormat('hr-HR', { style: 'currency', currency }).format(value);
+  } catch (error) {
+    return `${value.toFixed(2)} ${currency}`;
+  }
+}
+
+function convertCents(amountCents, fromCurrency = getDisplayCurrency(), toCurrency = getDisplayCurrency()) {
+  if (!Number.isFinite(amountCents)) return 0;
+  const rates = getExchangeRates();
+  const fromRate = rates[fromCurrency] ?? 1;
+  const toRate = rates[toCurrency] ?? 1;
+  if (!fromRate || !toRate) return Math.round(amountCents);
+  if (fromCurrency === toCurrency) return Math.round(amountCents);
+  const amountInBase = ((amountCents || 0) / 100) / fromRate;
+  const converted = amountInBase * toRate * 100;
+  return Math.round(converted);
+}
+
+function getAccountCurrency(accountId) {
+  if (!accountId) return getDisplayCurrency();
+  const account = state.settings.accounts.find(acc => acc.id === accountId);
+  return account?.currency || getDisplayCurrency();
+}
+
+function amountInDisplayCurrency(tx) {
+  if (!tx) return 0;
+  const currency = getAccountCurrency(tx.accountId);
+  return convertCents(tx.amountCents || 0, currency, getDisplayCurrency());
+}
+
+function signedAmountInDisplayCurrency(tx) {
+  const base = amountInDisplayCurrency(tx);
+  if (tx.type === 'expense') return -Math.abs(base);
+  if (tx.type === 'income') return Math.abs(base);
+  if (tx.type === 'growth') {
+    const sign = Math.sign(tx.amountCents || 0);
+    if (sign === 0) return 0;
+    return sign > 0 ? Math.abs(base) : -Math.abs(base);
+  }
+  return base;
+}
+
+function formatPercentage(value) {
+  return new Intl.NumberFormat('hr-HR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  }).format(value);
 }
 
 function parseAmountToCents(value) {
@@ -227,6 +289,36 @@ function loadSettings() {
       settings.marketsWatchlist = structuredClone(DEFAULT_MARKETS_WATCHLIST);
       migrated = true;
     }
+    if (!settings.displayCurrency) {
+      settings.displayCurrency = 'EUR';
+      migrated = true;
+    }
+    if (!settings.taxRules || !Array.isArray(settings.taxRules)) {
+      settings.taxRules = [];
+      migrated = true;
+    }
+    const exchanges = { ...DEFAULT_EXCHANGE_RATES, ...(settings.exchangeRates || {}) };
+    settings.exchangeRates = exchanges;
+    if (Array.isArray(settings.taxRules)) {
+      settings.taxRules = settings.taxRules.map(rule => ({
+        id: rule.id || uuid(),
+        name: rule.name || 'Pravilo',
+        appliesTo: rule.appliesTo || 'income',
+        categories: Array.isArray(rule.categories)
+          ? rule.categories.map(cat => normalizeCategory(cat)).filter(Boolean)
+          : [],
+        rate: Number(rule.rate) || 0
+      }));
+    }
+    if (Array.isArray(settings.accounts)) {
+      settings.accounts = settings.accounts.map(acc => ({
+        ...acc,
+        currency: acc.currency || 'EUR',
+        openingBalanceCents: Number.isFinite(acc.openingBalanceCents)
+          ? Math.round(acc.openingBalanceCents)
+          : Math.round((acc.openingBalance || 0) * 100)
+      }));
+    }
     if (migrated) {
       localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
     }
@@ -243,7 +335,7 @@ function saveSettings(settings) {
 
 function ensureDefaultAccount(settings) {
   if (!Array.isArray(settings.accounts) || settings.accounts.length === 0) {
-    const defaultAccount = { id: uuid(), name: 'Glavni račun', currency: 'EUR', order: 0, hidden: false };
+    const defaultAccount = { id: uuid(), name: 'Glavni račun', currency: 'EUR', openingBalanceCents: 0, order: 0, hidden: false };
     settings.accounts = [defaultAccount];
     settings.defaultAccountId = defaultAccount.id;
   }
@@ -391,9 +483,14 @@ function filterByMonth(txs, yyyyMm) {
 }
 
 function sumByType(txs, type) {
+  const displayCurrency = getDisplayCurrency();
+  const accountsMap = new Map(state.settings.accounts.map(acc => [acc.id, acc.currency || 'EUR']));
   return txs
     .filter(tx => tx.type === type && !isTransfer(tx))
-    .reduce((acc, tx) => acc + (tx.amountCents || 0), 0);
+    .reduce((acc, tx) => {
+      const currency = accountsMap.get(tx.accountId) || getDisplayCurrency();
+      return acc + convertCents(tx.amountCents || 0, currency, displayCurrency);
+    }, 0);
 }
 
 function splitEntries(tx) {
@@ -403,14 +500,18 @@ function splitEntries(tx) {
   return [{ category: normalizeCategory(tx.category), amountCents: tx.amountCents || 0 }];
 }
 function groupByCategory(txs, type) {
+  const displayCurrency = getDisplayCurrency();
+  const accountsMap = new Map(state.settings.accounts.map(acc => [acc.id, acc.currency || 'EUR']));
   const map = new Map();
   txs.forEach(tx => {
     if (isTransfer(tx)) return;
     if (tx.type !== type) return;
+    const currency = accountsMap.get(tx.accountId) || getDisplayCurrency();
     splitEntries(tx).forEach(entry => {
       if (!entry.category) return;
+      const converted = convertCents(entry.amountCents || 0, currency, displayCurrency);
       const prev = map.get(entry.category) || 0;
-      map.set(entry.category, prev + entry.amountCents);
+      map.set(entry.category, prev + converted);
     });
   });
   return map;
@@ -440,10 +541,11 @@ function buildTrendData(txs, yyyyMm) {
   txs.forEach(tx => {
     if (!days.includes(tx.date)) return;
     if (isTransfer(tx)) return;
+    const converted = amountInDisplayCurrency(tx);
     if (tx.type === 'income') {
-      incomeDaily.set(tx.date, (incomeDaily.get(tx.date) || 0) + (tx.amountCents || 0));
+      incomeDaily.set(tx.date, (incomeDaily.get(tx.date) || 0) + converted);
     } else if (tx.type === 'expense') {
-      expenseDaily.set(tx.date, (expenseDaily.get(tx.date) || 0) + (tx.amountCents || 0));
+      expenseDaily.set(tx.date, (expenseDaily.get(tx.date) || 0) + converted);
     }
   });
   const incomes = days.map(day => incomeDaily.get(day) || 0);
@@ -455,6 +557,68 @@ function buildTrendData(txs, yyyyMm) {
     balance[index] = running;
   });
   return { days, incomes, expenses, balance };
+}
+
+function savingsRateForMonth(yyyyMm) {
+  const monthTxs = filterByMonth(state.transactions, yyyyMm);
+  const incomes = sumByType(monthTxs, 'income');
+  const expenses = sumByType(monthTxs, 'expense');
+  if (!incomes) return 0;
+  return ((incomes - expenses) / incomes) * 100;
+}
+
+function accountBalanceNow(account) {
+  if (!account) return 0;
+  const currency = account.currency || 'EUR';
+  let total = account.openingBalanceCents || 0;
+  state.transactions.forEach(tx => {
+    if (tx.accountId !== account.id) return;
+    if (isTransfer(tx)) return;
+    if (tx.type === 'income') total += tx.amountCents || 0;
+    else if (tx.type === 'expense') total -= tx.amountCents || 0;
+    else if (tx.type === 'growth') total += tx.amountCents || 0;
+  });
+  return convertCents(total, currency, getDisplayCurrency());
+}
+
+function netWorthNow() {
+  const accounts = state.settings.accounts || [];
+  const cash = accounts.reduce((sum, account) => sum + accountBalanceNow(account), 0);
+  const unattachedGrowth = state.transactions
+    .filter(tx => tx.type === 'growth' && !tx.accountId)
+    .reduce((sum, tx) => sum + signedAmountInDisplayCurrency(tx), 0);
+  return cash + unattachedGrowth;
+}
+
+function estimateTaxesForMonth(yyyyMm) {
+  const txs = filterByMonth(state.transactions, yyyyMm);
+  const rules = state.settings.taxRules || [];
+  const displayCurrency = getDisplayCurrency();
+  const accountsMap = new Map(state.settings.accounts.map(acc => [acc.id, acc.currency || 'EUR']));
+  let totalTax = 0;
+  const breakdown = [];
+  rules.forEach(rule => {
+    if (!rule || rule.appliesTo !== 'income') return;
+    const categories = Array.isArray(rule.categories) && rule.categories.length
+      ? rule.categories.map(cat => normalizeCategory(cat))
+      : null;
+    const baseCents = txs
+      .filter(tx => tx.type === 'income' && !isTransfer(tx))
+      .filter(tx => {
+        if (!categories) return true;
+        return categories.includes(normalizeCategory(tx.category));
+      })
+      .reduce((sum, tx) => {
+        const currency = accountsMap.get(tx.accountId) || displayCurrency;
+        return sum + convertCents(tx.amountCents || 0, currency, displayCurrency);
+      }, 0);
+    if (!baseCents) return;
+    const rate = Number(rule.rate) || 0;
+    const taxCents = Math.round(baseCents * rate);
+    totalTax += taxCents;
+    breakdown.push({ name: rule.name, baseCents, taxCents });
+  });
+  return { totalTax, breakdown };
 }
 
 function getActiveFilters() {
@@ -473,7 +637,10 @@ function applyFilters(list) {
     );
   }
   if (filters.type !== 'all') {
-    filtered = filtered.filter(tx => tx.type === filters.type);
+    filtered = filtered.filter(tx => {
+      if (filters.type === 'transfer') return isTransfer(tx);
+      return tx.type === filters.type;
+    });
   }
   if (filters.category) {
     filtered = filtered.filter(tx => splitEntries(tx).some(entry => entry.category.toLowerCase().includes(filters.category.toLowerCase())));
@@ -488,19 +655,19 @@ function applyFilters(list) {
     filtered = filtered.filter(tx => tx.date <= filters.to);
   }
   if (filters.minCents != null) {
-    filtered = filtered.filter(tx => tx.amountCents >= filters.minCents);
+    filtered = filtered.filter(tx => Math.abs(amountInDisplayCurrency(tx)) >= filters.minCents);
   }
   if (filters.maxCents != null) {
-    filtered = filtered.filter(tx => tx.amountCents <= filters.maxCents);
+    filtered = filtered.filter(tx => Math.abs(amountInDisplayCurrency(tx)) <= filters.maxCents);
   }
   filtered.sort((a, b) => {
     switch (filters.sort) {
       case 'date-asc':
         return a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '');
       case 'amount-desc':
-        return (b.amountCents || 0) - (a.amountCents || 0);
+        return Math.abs(amountInDisplayCurrency(b)) - Math.abs(amountInDisplayCurrency(a));
       case 'amount-asc':
-        return (a.amountCents || 0) - (b.amountCents || 0);
+        return Math.abs(amountInDisplayCurrency(a)) - Math.abs(amountInDisplayCurrency(b));
       case 'date-desc':
       default:
         return b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || '');
@@ -542,13 +709,33 @@ function renderKPIs() {
   const monthTxs = getMonthlyTransactions(false);
   const sumIncomes = sumByType(monthTxs, 'income');
   const sumExpenses = sumByType(monthTxs, 'expense');
+  const sumGrowth = sumByType(monthTxs, 'growth');
   const balance = sumIncomes - sumExpenses;
-  document.getElementById('sumIncomes').textContent = formatCurrencyHR(sumIncomes);
-  document.getElementById('sumExpenses').textContent = formatCurrencyHR(sumExpenses);
+  document.getElementById('sumIncomes').textContent = formatCurrency(sumIncomes);
+  document.getElementById('sumExpenses').textContent = formatCurrency(sumExpenses);
   const balanceEl = document.getElementById('sumBalance');
-  balanceEl.textContent = formatCurrencyHR(balance);
-  const card = document.getElementById('card-balance');
-  card.dataset.state = balance >= 0 ? 'positive' : 'negative';
+  balanceEl.textContent = formatCurrency(balance);
+  const balanceCard = document.getElementById('card-balance');
+  balanceCard.dataset.state = balance >= 0 ? 'positive' : 'negative';
+  const growthSummaryEl = document.getElementById('growthSummary');
+  if (growthSummaryEl) {
+    const prefix = sumGrowth > 0 ? '+' : '';
+    growthSummaryEl.textContent = `Prirast ulaganja (mj.): ${prefix}${formatCurrency(sumGrowth)}`;
+  }
+  const savingsRate = savingsRateForMonth(state.selectedMonth);
+  const savingsEl = document.getElementById('sumSavingsRate');
+  if (savingsEl) {
+    savingsEl.textContent = `${formatPercentage(savingsRate)}%`;
+    const savingsCard = document.getElementById('card-savings');
+    if (savingsCard) savingsCard.dataset.state = savingsRate >= 0 ? 'positive' : 'negative';
+  }
+  const netWorth = netWorthNow();
+  const netWorthEl = document.getElementById('sumNetWorth');
+  if (netWorthEl) {
+    netWorthEl.textContent = formatCurrency(netWorth);
+    const netWorthCard = document.getElementById('card-networth');
+    if (netWorthCard) netWorthCard.dataset.state = netWorth >= 0 ? 'positive' : 'negative';
+  }
 }
 
 function renderCategoryChart() {
@@ -558,6 +745,11 @@ function renderCategoryChart() {
   if (state.chartMode === 'trend') {
     renderTrendChart(monthTxs);
     toggleChartView('trend');
+    return;
+  }
+  if (state.chartMode === 'balance') {
+    renderBalanceChart(monthTxs);
+    toggleChartView('balance');
     return;
   }
   toggleChartView('doughnut');
@@ -604,7 +796,7 @@ function renderCategoryChart() {
               const label = ctx.label || '';
               const cents = ctx.parsed || 0;
               const pct = total ? ((cents / total) * 100) : 0;
-              return `${label}: ${formatCurrencyHR(cents)} (${pct.toFixed(1)}%)`;
+              return `${label}: ${formatCurrency(cents)} (${pct.toFixed(1)}%)`;
             }
           }
         },
@@ -675,14 +867,14 @@ function renderTrendChart(monthTxs) {
       scales: {
         y: {
           ticks: {
-            callback: value => formatCurrencyHR(Number(value) * 100)
+            callback: value => formatCurrency(Number(value) * 100)
           }
         },
         y1: {
           position: 'right',
           grid: { drawOnChartArea: false },
           ticks: {
-            callback: value => formatCurrencyHR(Number(value) * 100)
+            callback: value => formatCurrency(Number(value) * 100)
           }
         }
       },
@@ -692,7 +884,82 @@ function renderTrendChart(monthTxs) {
           callbacks: {
             label(ctx) {
               const value = ctx.parsed.y;
-              return `${ctx.dataset.label}: ${formatCurrencyHR(Math.round(value * 100))}`;
+              return `${ctx.dataset.label}: ${formatCurrency(Math.round(value * 100))}`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function buildDailyBalanceSeries(txs, yyyyMm) {
+  const days = getDaysInMonth(yyyyMm);
+  const netByDay = new Map(days.map(day => [day, 0]));
+  txs.forEach(tx => {
+    if (!tx.date?.startsWith(yyyyMm)) return;
+    if (isTransfer(tx) || tx.type === 'growth') return;
+    const signed = signedAmountInDisplayCurrency(tx);
+    netByDay.set(tx.date, (netByDay.get(tx.date) || 0) + signed);
+  });
+  const labels = [];
+  const values = [];
+  let running = 0;
+  days.forEach(day => {
+    running += netByDay.get(day) || 0;
+    labels.push(new Date(`${day}T00:00`).toLocaleDateString('hr-HR'));
+    values.push(running / 100);
+  });
+  return { labels, values };
+}
+
+function renderBalanceChart(monthTxs) {
+  const filters = getActiveFilters();
+  const baseTxs = filters.affectChart ? applyFilters(monthTxs) : monthTxs;
+  const { labels, values } = buildDailyBalanceSeries(baseTxs, state.selectedMonth);
+  const canvas = document.getElementById('balanceChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (state.balanceChart) {
+    state.balanceChart.destroy();
+    state.balanceChart = null;
+  }
+  state.balanceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Saldo',
+          data: values,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.15)',
+          fill: true,
+          tension: 0.25,
+          pointRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const cents = Math.round(ctx.parsed.y * 100);
+              return `Saldo: ${formatCurrency(cents)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback(value) {
+              return formatCurrency(Math.round(value * 100));
             }
           }
         }
@@ -717,6 +984,7 @@ function renderHistoryDay() {
     return;
   }
   const accountsMap = new Map(state.settings.accounts.map(acc => [acc.id, acc]));
+  const displayCurrency = getDisplayCurrency();
   dayTxs.forEach(tx => {
     const row = document.createElement('tr');
     const typeCell = document.createElement('td');
@@ -731,6 +999,11 @@ function renderHistoryDay() {
       pillClass = 'pill expense';
       pillText = 'Trošak';
       pillIcon = '▼';
+    } else if (tx.type === 'growth') {
+      pillClass = 'pill growth';
+      const positive = Math.sign(tx.amountCents || 0) >= 0;
+      pillText = 'Prirast';
+      pillIcon = positive ? '▲' : '▼';
     }
     typeCell.innerHTML = `<span class="${pillClass}" title="${pillText}">${pillIcon} ${pillText}</span>`;
     row.appendChild(typeCell);
@@ -739,25 +1012,31 @@ function renderHistoryDay() {
     titleCell.textContent = tx.title || '';
     row.appendChild(titleCell);
 
+    const acc = accountsMap.get(tx.accountId);
     const categoryCell = document.createElement('td');
     const splits = splitEntries(tx);
     if (splits.length > 1) {
       categoryCell.innerHTML = `${normalizeCategory(tx.category)} <span class="split-icon" title="Razdijeljeno">⚑</span>`;
-      categoryCell.title = splits.map(s => `${s.category}: ${formatCurrencyHR(s.amountCents)}`).join('\n');
+      const accCurrency = acc?.currency || displayCurrency;
+      categoryCell.title = splits
+        .map(s => {
+          const converted = convertCents(s.amountCents || 0, accCurrency, displayCurrency);
+          return `${s.category}: ${formatCurrency(converted)}`;
+        })
+        .join('\n');
     } else {
       categoryCell.textContent = splits[0]?.category || '';
     }
     row.appendChild(categoryCell);
 
     const accountCell = document.createElement('td');
-    const acc = accountsMap.get(tx.accountId);
-    accountCell.textContent = acc ? acc.name : '—';
+    accountCell.textContent = acc ? `${acc.name} (${acc.currency || displayCurrency})` : '—';
     row.appendChild(accountCell);
 
     const amountCell = document.createElement('td');
     amountCell.className = 'align-right';
-    const sign = tx.type === 'expense' ? '-' : '';
-    amountCell.textContent = `${sign}${formatCurrencyHR(tx.amountCents)}`;
+    const signedCents = signedAmountInDisplayCurrency(tx);
+    amountCell.textContent = formatCurrency(signedCents);
     if (isTransfer(tx)) {
       const span = document.createElement('span');
       span.className = 'transfer-indicator';
@@ -851,6 +1130,7 @@ function handleTxFormSubmit(event) {
   document.getElementById('splitRows').innerHTML = '';
   document.getElementById('splitEditor').hidden = true;
   document.getElementById('txAccount').value = state.settings.defaultAccountId;
+  updateCreateFormForType(document.getElementById('txType').value);
   renderHistoryDay();
   focusTitleField();
 }
@@ -870,12 +1150,19 @@ function collectTransactionForm() {
   if (!type) { setError('txType', 'Odaberite tip.'); valid = false; }
   if (!title) { setError('txTitle', 'Unesite naziv.'); valid = false; }
   if (!category) { setError('txCategory', 'Unesite kategoriju.'); valid = false; }
-  if (!accountId) { setError('txAccount', 'Odaberite račun.'); valid = false; }
-  if (!amountCents || amountCents <= 0) { setError('txAmount', 'Unesite iznos veći od 0.'); valid = false; }
+  if (type !== 'growth' && !accountId) { setError('txAccount', 'Odaberite račun.'); valid = false; }
+  const amountInvalid =
+    amountCents == null ||
+    (type !== 'growth' && amountCents <= 0) ||
+    (type === 'growth' && amountCents === 0);
+  if (amountInvalid) {
+    setError('txAmount', type === 'growth' ? 'Unesite iznos različit od 0.' : 'Unesite iznos veći od 0.');
+    valid = false;
+  }
   if (!date) { setError('txDate', 'Odaberite datum.'); valid = false; }
 
-  const splits = collectSplitRows('splitRows');
-  if (splits && splits.length > 0) {
+  const splits = type === 'growth' ? [] : collectSplitRows('splitRows');
+  if (type !== 'growth' && splits && splits.length > 0) {
     const splitTotal = sum(splits.map(s => s.amountCents));
     if (splitTotal !== amountCents) {
       setError('splits', 'Zbroj podjela mora odgovarati ukupnom iznosu.');
@@ -890,7 +1177,7 @@ function collectTransactionForm() {
     type,
     title,
     category,
-    accountId,
+    accountId: type === 'growth' ? (accountId || '') : accountId,
     amountCents,
     date,
     time: time || '',
@@ -915,6 +1202,42 @@ function collectSplitRows(containerId) {
     splits.push({ category: normalizeCategory(categoryInput), amountCents: cents });
   });
   return splits;
+}
+
+function updateCreateFormForType(type) {
+  const accountField = document.querySelector('[data-field="account"]');
+  if (accountField) {
+    accountField.hidden = type === 'growth';
+    const select = accountField.querySelector('select');
+    if (select) select.required = type !== 'growth';
+  }
+  const splitControlButton = document.getElementById('btnSplit');
+  if (splitControlButton) {
+    const wrapper = splitControlButton.closest('.split-control');
+    if (wrapper) wrapper.hidden = type === 'growth';
+  }
+  if (type === 'growth') {
+    const editor = document.getElementById('splitEditor');
+    if (editor) editor.hidden = true;
+  }
+}
+
+function updateEditFormForType(type) {
+  const accountField = document.querySelector('[data-field="edit-account"]');
+  if (accountField) {
+    accountField.hidden = type === 'growth';
+    const select = accountField.querySelector('select');
+    if (select) select.required = type !== 'growth';
+  }
+  const splitToggle = document.getElementById('editSplitToggle');
+  if (splitToggle) {
+    const wrapper = splitToggle.closest('.split-control');
+    if (wrapper) wrapper.hidden = type === 'growth';
+  }
+  if (type === 'growth') {
+    const editor = document.getElementById('editSplitEditor');
+    if (editor) editor.hidden = true;
+  }
 }
 
 function setError(fieldId, message) {
@@ -966,6 +1289,7 @@ function openEditModal(id) {
     document.getElementById('editSplitEditor').hidden = true;
   }
 
+  updateEditFormForType(tx.type);
   openModal('#editTxModal');
 }
 
@@ -997,11 +1321,18 @@ function handleEditSubmit(event) {
   if (!type) { setError('editTxType', 'Odaberite tip.'); valid = false; }
   if (!title) { setError('editTxTitleInput', 'Unesite naziv.'); valid = false; }
   if (!category) { setError('editTxCategory', 'Unesite kategoriju.'); valid = false; }
-  if (!accountId) { setError('editTxAccount', 'Odaberite račun.'); valid = false; }
-  if (!amountCents || amountCents <= 0) { setError('editTxAmount', 'Unesite iznos veći od 0.'); valid = false; }
+  if (type !== 'growth' && !accountId) { setError('editTxAccount', 'Odaberite račun.'); valid = false; }
+  const amountInvalid =
+    amountCents == null ||
+    (type !== 'growth' && amountCents <= 0) ||
+    (type === 'growth' && amountCents === 0);
+  if (amountInvalid) {
+    setError('editTxAmount', type === 'growth' ? 'Unesite iznos različit od 0.' : 'Unesite iznos veći od 0.');
+    valid = false;
+  }
   if (!date) { setError('editTxDate', 'Odaberite datum.'); valid = false; }
-  const splits = collectSplitRows('editSplitRows');
-  if (splits && splits.length > 0) {
+  const splits = type === 'growth' ? [] : collectSplitRows('editSplitRows');
+  if (type !== 'growth' && splits && splits.length > 0) {
     const splitTotal = sum(splits.map(s => s.amountCents));
     if (splitTotal !== amountCents) {
       setError('editSplits', 'Zbroj podjela mora odgovarati iznosu.');
@@ -1014,7 +1345,7 @@ function handleEditSubmit(event) {
     type,
     title,
     category,
-    accountId,
+    accountId: type === 'growth' ? (accountId || '') : accountId,
     amountCents,
     date,
     time: time || '',
@@ -1097,8 +1428,8 @@ function renderBudgets() {
     if (!item.active) div.classList.add('inactive');
     const pct = item.limitCents > 0 ? Math.min(100, Math.round((item.spentCents / item.limitCents) * 100)) : 0;
     const limitLabel = item.limitCents > 0
-      ? `Potrošeno: ${formatCurrencyHR(item.spentCents)} / ${formatCurrencyHR(item.limitCents)}`
-      : `Potrošeno: ${formatCurrencyHR(item.spentCents)} (bez limita)`;
+      ? `Potrošeno: ${formatCurrency(item.spentCents)} / ${formatCurrency(item.limitCents)}`
+      : `Potrošeno: ${formatCurrency(item.spentCents)} (bez limita)`;
     div.innerHTML = `
       <div class="budget-row-header">
         <div class="budget-row-info">
@@ -1166,11 +1497,14 @@ function calcBudgetUsage(monthTxs) {
   const entries = Object.entries(budgets);
   if (entries.length === 0) return [];
   const map = new Map();
+  const accountsMap = new Map(state.settings.accounts.map(acc => [acc.id, acc.currency || 'EUR']));
   monthTxs.forEach(tx => {
     if (isTransfer(tx) || tx.type !== 'expense') return;
+    const currency = accountsMap.get(tx.accountId) || getDisplayCurrency();
     splitEntries(tx).forEach(entry => {
       const key = normalizeCategory(entry.category);
-      map.set(key, (map.get(key) || 0) + entry.amountCents);
+      const converted = convertCents(entry.amountCents || 0, currency, getDisplayCurrency());
+      map.set(key, (map.get(key) || 0) + converted);
     });
   });
   return entries.map(([category, cfg]) => {
@@ -1192,7 +1526,7 @@ function warnIfBudgetHit(month = state.selectedMonth) {
     const pct = (item.spentCents / item.limitCents) * 100;
     if (pct >= 80) {
       const tone = pct >= 100 ? 'danger' : 'warning';
-      const message = `${item.category} ${pct.toFixed(0)}% (${formatCurrencyHR(item.spentCents)} / ${formatCurrencyHR(item.limitCents)})`;
+      const message = `${item.category} ${pct.toFixed(0)}% (${formatCurrency(item.spentCents)} / ${formatCurrency(item.limitCents)})`;
       showBanner(message, tone, { kind: `budget-${item.category}` });
       const key = `${month}:${item.category}`;
       if (pct >= 80 && state.budgetWarnings.get(key) !== (pct >= 100 ? 'danger' : 'warning')) {
@@ -1218,7 +1552,7 @@ function renderRecurringList() {
     div.className = 'recurring-item';
     div.innerHTML = `
       <strong>${rec.title}</strong>
-      <span>${rec.type === 'income' ? 'Prihod' : 'Trošak'} • ${normalizeCategory(rec.category)} • ${formatCurrencyHR(rec.amountCents)}</span>
+      <span>${rec.type === 'income' ? 'Prihod' : 'Trošak'} • ${normalizeCategory(rec.category)} • ${formatCurrency(rec.amountCents)}</span>
       <span>Dan u mjesecu: ${rec.day}</span>
       <span>Status: ${rec.active ? 'Aktivno' : 'Neaktivno'}</span>
     `;
@@ -1364,7 +1698,7 @@ function renderGoals() {
     const pct = goal.targetCents > 0 ? Math.min(100, Math.round((goal.savedCents / goal.targetCents) * 100)) : 0;
     div.innerHTML = `
       <strong>${goal.title}</strong>
-      <span>Spremljeno: ${formatCurrencyHR(goal.savedCents)} / ${formatCurrencyHR(goal.targetCents)}</span>
+      <span>Spremljeno: ${formatCurrency(goal.savedCents)} / ${formatCurrency(goal.targetCents)}</span>
       ${goal.deadline ? `<span>Rok: ${new Date(goal.deadline + 'T00:00').toLocaleDateString('hr-HR')}</span>` : ''}
       <div class="progress-bar"><span style="width:${pct}%"></span></div>
     `;
@@ -1431,6 +1765,7 @@ function renderAccountsList() {
     div.innerHTML = `
       <strong>${acc.name}</strong>
       <span>Valuta: ${acc.currency}</span>
+      <span>Početno stanje: ${formatCurrency(acc.openingBalanceCents || 0, acc.currency || 'EUR')}</span>
       <span>Status: ${acc.hidden ? 'Skriven' : 'Vidljiv'}</span>
       <span>Redoslijed: ${acc.order ?? 0}</span>
     `;
@@ -1468,6 +1803,9 @@ function handleAccountSubmit(event) {
   const name = document.getElementById('accountName').value.trim();
   const currency = document.getElementById('accountCurrency').value.trim() || 'EUR';
   const hidden = document.getElementById('accountHidden').checked;
+  const openingValue = document.getElementById('accountOpening').value;
+  const openingCentsRaw = openingValue ? parseAmountToCents(openingValue) : 0;
+  const openingCents = Number.isFinite(openingCentsRaw) ? openingCentsRaw : 0;
   if (!name) {
     showToast('Unesite naziv računa.', 'danger');
     return;
@@ -1476,6 +1814,7 @@ function handleAccountSubmit(event) {
     id: uuid(),
     name,
     currency,
+    openingBalanceCents: openingCents,
     order: state.settings.accounts.length,
     hidden,
     createdAt: nowISO(),
@@ -1570,6 +1909,90 @@ function handleBudgetSubmit(event) {
   warnIfBudgetHit();
 }
 
+function renderTaxRules() {
+  const list = document.getElementById('taxRulesList');
+  if (!list) return;
+  list.innerHTML = '';
+  const rules = state.settings.taxRules || [];
+  if (rules.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'Nema definiranih poreznih pravila.';
+    list.appendChild(empty);
+    return;
+  }
+  const numberFormat = new Intl.NumberFormat('hr-HR', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+  rules.forEach(rule => {
+    const item = document.createElement('div');
+    item.className = 'tax-rule-item';
+    item.dataset.id = rule.id;
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const scopeLabel = rule.appliesTo === 'income' ? 'Prihodi' : 'Transakcije';
+    const ratePercent = numberFormat.format((Number(rule.rate) || 0) * 100);
+    const nameLine = document.createElement('strong');
+    nameLine.textContent = rule.name;
+    meta.appendChild(nameLine);
+    const scopeLine = document.createElement('span');
+    scopeLine.textContent = `Tip: ${scopeLabel}`;
+    meta.appendChild(scopeLine);
+    const rateLine = document.createElement('span');
+    rateLine.textContent = `Stopa: ${ratePercent}%`;
+    meta.appendChild(rateLine);
+    if (rule.categories && rule.categories.length) {
+      const categoriesLine = document.createElement('span');
+      categoriesLine.textContent = `Kategorije: ${rule.categories.join(', ')}`;
+      meta.appendChild(categoriesLine);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'tax-rule-actions';
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn btn-secondary';
+    deleteBtn.textContent = 'Obriši';
+    deleteBtn.addEventListener('click', () => removeTaxRule(rule.id));
+    actions.appendChild(deleteBtn);
+    item.append(meta, actions);
+    list.appendChild(item);
+  });
+}
+
+function handleTaxRuleSubmit(event) {
+  event.preventDefault();
+  const name = document.getElementById('taxRuleName').value.trim();
+  const scope = document.getElementById('taxRuleScope').value || 'income';
+  const rateInput = parseFloat(document.getElementById('taxRuleRate').value.replace(',', '.'));
+  const categoriesRaw = document.getElementById('taxRuleCategories').value || '';
+  if (!name || !Number.isFinite(rateInput)) {
+    alert('Unesite naziv i stopu.');
+    return;
+  }
+  const categories = categoriesRaw
+    .split(',')
+    .map(cat => normalizeCategory(cat))
+    .filter(Boolean);
+  const rule = {
+    id: uuid(),
+    name,
+    appliesTo: scope,
+    categories,
+    rate: Math.max(rateInput, 0) / 100
+  };
+  state.settings.taxRules = state.settings.taxRules || [];
+  state.settings.taxRules.push(rule);
+  saveSettings(state.settings);
+  event.target.reset();
+  renderTaxRules();
+}
+
+function removeTaxRule(id) {
+  if (!id) return;
+  if (!confirm('Obrisati porezno pravilo?')) return;
+  state.settings.taxRules = (state.settings.taxRules || []).filter(rule => rule.id !== id);
+  saveSettings(state.settings);
+  renderTaxRules();
+}
+
 function handleFiltersSubmit(event) {
   event.preventDefault();
   const filters = getActiveFilters();
@@ -1619,6 +2042,8 @@ function updateMenus() {
   if (darkToggle) darkToggle.checked = Boolean(state.settings.darkMode);
   const backupToggle = document.getElementById('backupToggle');
   if (backupToggle) backupToggle.checked = Boolean(state.settings.weeklyBackup);
+  const currencySelect = document.getElementById('displayCurrencySelect');
+  if (currencySelect) currencySelect.value = state.settings.displayCurrency || 'EUR';
 }
 function maybeOfferWeeklyBackup() {
   if (!state.settings.weeklyBackup) return;
@@ -1729,18 +2154,23 @@ function mergeTransactions(existing, incoming) {
 
 function exportMonthCSV(yyyyMm) {
   const txs = filterByMonth(state.transactions, yyyyMm);
-  const headers = ['ID', 'Tip', 'Naziv', 'Kategorija', 'Račun', 'Datum', 'Vrijeme', 'Iznos(EUR)', 'Bilješka'];
-  const rows = txs.map(tx => [
-    tx.id,
-    tx.type,
-    tx.title,
-    normalizeCategory(tx.category),
-    state.settings.accounts.find(acc => acc.id === tx.accountId)?.name || '',
-    tx.date,
-    tx.time || '',
-    (tx.amountCents / 100).toFixed(2).replace('.', ','),
-    (tx.note || '').replace(/"/g, '""')
-  ]);
+  const displayCurrency = getDisplayCurrency();
+  const headers = ['ID', 'Tip', 'Naziv', 'Kategorija', 'Račun', 'Datum', 'Vrijeme', `Iznos (${displayCurrency})`, 'Bilješka'];
+  const accountNames = new Map(state.settings.accounts.map(acc => [acc.id, acc.name]));
+  const rows = txs.map(tx => {
+    const signed = signedAmountInDisplayCurrency(tx);
+    return [
+      tx.id,
+      tx.type,
+      tx.title,
+      normalizeCategory(tx.category),
+      accountNames.get(tx.accountId) || '',
+      tx.date,
+      tx.time || '',
+      (signed / 100).toFixed(2).replace('.', ','),
+      (tx.note || '').replace(/"/g, '""')
+    ];
+  });
   const csv = [headers.join(';'), ...rows.map(r => r.map(field => `"${String(field ?? '').replace(/"/g, '""')}"`).join(';'))].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -1761,9 +2191,13 @@ function exportMonthPDFModern(yyyyMm) {
   }
 
   const txs = filterByMonth(state.transactions, yyyyMm);
-  const incomes = sumByType(txs, 'income') / 100;
-  const expenses = sumByType(txs, 'expense') / 100;
-  const balance = incomes - expenses;
+  const incomesCents = sumByType(txs, 'income');
+  const expensesCents = sumByType(txs, 'expense');
+  const growthCents = sumByType(txs, 'growth');
+  const balanceCents = incomesCents - expensesCents;
+  const savingsRate = savingsRateForMonth(yyyyMm);
+  const netWorthCents = netWorthNow();
+  const taxes = estimateTaxesForMonth(yyyyMm);
   const monthLabel = new Date(`${yyyyMm}-01`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
 
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -1785,9 +2219,14 @@ function exportMonthPDFModern(yyyyMm) {
   doc.text('Sažetak', margin, y);
   y += 8;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Ukupni prihodi:  ${incomes.toFixed(2)} €`, margin, y); y += lineHeight;
-  doc.text(`Ukupni troškovi: ${expenses.toFixed(2)} €`, margin, y); y += lineHeight;
-  doc.text(`Saldo:           ${balance.toFixed(2)} €`, margin, y); y += lineHeight + 5;
+  doc.text(`Ukupni prihodi:  ${formatCurrency(incomesCents)}`, margin, y); y += lineHeight;
+  doc.text(`Ukupni troškovi: ${formatCurrency(expensesCents)}`, margin, y); y += lineHeight;
+  doc.text(`Saldo:           ${formatCurrency(balanceCents)}`, margin, y); y += lineHeight;
+  const growthLabel = `${growthCents > 0 ? '+' : ''}${formatCurrency(growthCents)}`;
+  doc.text(`Prirast ulaganja: ${growthLabel} (ne računa se u prihod)`, margin, y); y += lineHeight;
+  doc.text(`Stopa štednje:   ${formatPercentage(savingsRate)}%`, margin, y); y += lineHeight;
+  doc.text(`Neto vrijednost: ${formatCurrency(netWorthCents)}`, margin, y); y += lineHeight;
+  doc.text(`Procijenjeni porez: ${formatCurrency(taxes.totalTax)}`, margin, y); y += lineHeight + 5;
 
   const expenseEntries = Object.entries(groupByCategory(txs, 'expense'))
     .map(([category, cents]) => ({ category, value: (cents || 0) / 100 }))
@@ -1812,7 +2251,7 @@ function exportMonthPDFModern(yyyyMm) {
         y = margin;
       }
       doc.text(entry.category, margin, y);
-      doc.text(entry.value.toFixed(2), 195 - margin, y, { align: 'right' });
+      doc.text(formatCurrency(Math.round(entry.value * 100)), 195 - margin, y, { align: 'right' });
       y += lineHeight;
     });
     y += 4;
@@ -1836,9 +2275,37 @@ function exportMonthPDFModern(yyyyMm) {
         doc.addPage();
         y = margin;
       }
-      doc.text(`${index + 1}. ${entry.category}: ${entry.value.toFixed(2)} €`, margin, y);
+      doc.text(`${index + 1}. ${entry.category}: ${formatCurrency(Math.round(entry.value * 100))}`, margin, y);
       y += lineHeight;
     });
+  }
+
+  if (taxes.breakdown.length) {
+    if (y > 260) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.text('Porezna razrada', margin, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Pravilo', margin, y);
+    doc.text('Osnovica', 120, y);
+    doc.text('Porez', 195 - margin, y, { align: 'right' });
+    y += lineHeight;
+    doc.setDrawColor(148, 163, 184);
+    doc.line(margin, y - 4, 195 - margin, y - 4);
+    taxes.breakdown.forEach(item => {
+      if (y > 270) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(item.name, margin, y);
+      doc.text(formatCurrency(item.baseCents), 120, y);
+      doc.text(formatCurrency(item.taxCents), 195 - margin, y, { align: 'right' });
+      y += lineHeight;
+    });
+    y += 4;
   }
 
   doc.setFontSize(10);
@@ -1868,7 +2335,11 @@ function exportMonthPDFClassic(yyyyMm) {
   const txs = filterByMonth(state.transactions, yyyyMm).filter(tx => !isTransfer(tx));
   const incomesC = sumByType(txs, 'income');
   const expensesC = sumByType(txs, 'expense');
-  const balance = (incomesC - expensesC) / 100;
+  const growthC = sumByType(txs, 'growth');
+  const taxes = estimateTaxesForMonth(yyyyMm);
+  const balanceC = incomesC - expensesC;
+  const savingsRate = savingsRateForMonth(yyyyMm);
+  const netWorthC = netWorthNow();
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.text(`Izvještaj ${yyyyMm}`, margin, y);
@@ -1884,15 +2355,20 @@ function exportMonthPDFClassic(yyyyMm) {
   doc.text('Sažetak', margin, y);
   y += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Prihodi:  ${(incomesC / 100).toFixed(2)} €`, margin, y); y += 5;
-  doc.text(`Troškovi: ${(expensesC / 100).toFixed(2)} €`, margin, y); y += 5;
-  doc.text(`Saldo:    ${balance.toFixed(2)} €`, margin, y); y += 8;
+  doc.text(`Prihodi:  ${formatCurrency(incomesC)}`, margin, y); y += 5;
+  doc.text(`Troškovi: ${formatCurrency(expensesC)}`, margin, y); y += 5;
+  doc.text(`Saldo:    ${formatCurrency(balanceC)}`, margin, y); y += 5;
+  const growthClassic = `${growthC > 0 ? '+' : ''}${formatCurrency(growthC)}`;
+  doc.text(`Prirast:  ${growthClassic}`, margin, y); y += 5;
+  doc.text(`Stopa štednje: ${formatPercentage(savingsRate)}%`, margin, y); y += 5;
+  doc.text(`Neto vrijednost: ${formatCurrency(netWorthC)}`, margin, y); y += 5;
+  doc.text(`Procijenjeni porez: ${formatCurrency(taxes.totalTax)}`, margin, y); y += 8;
   doc.line(margin, y, 210 - margin, y);
   y += 6;
   const byCat = groupByCategory(txs, 'expense');
   const rows = Object.entries(byCat)
     .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-    .map(([cat, val]) => [cat, `${(val / 100).toFixed(2)} €`]);
+    .map(([cat, val]) => [cat, formatCurrency(val)]);
   doc.setFont('helvetica', 'bold');
   doc.text('Troškovi po kategorijama', margin, y);
   y += 6;
@@ -1912,6 +2388,33 @@ function exportMonthPDFClassic(yyyyMm) {
     doc.text(row[1], 120, y);
     y += 6;
   });
+  if (taxes.breakdown.length) {
+    if (y > 260) {
+      doc.addPage();
+      y = margin;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.text('Porezna razrada', margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Pravilo', margin, y);
+    doc.text('Osnovica', 120, y);
+    doc.text('Porez', 210 - margin, y, { align: 'right' });
+    y += 4;
+    doc.setDrawColor(200);
+    doc.line(margin, y, 210 - margin, y);
+    y += 4;
+    taxes.breakdown.forEach(entry => {
+      if (y > 270) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(entry.name, margin, y);
+      doc.text(formatCurrency(entry.baseCents), 120, y);
+      doc.text(formatCurrency(entry.taxCents), 210 - margin, y, { align: 'right' });
+      y += 6;
+    });
+  }
   doc.setFontSize(9);
   doc.setTextColor(120);
   doc.text('Klasični izvještaj — Financijski tracker — © Leon Sošić 2025', 105, 290, { align: 'center' });
@@ -2064,6 +2567,7 @@ function setupMenus() {
   document.getElementById('openFilterDrawer')?.addEventListener('click', withMoreMenuClose(() => openDrawer('#filterDrawer')));
   document.getElementById('btnExportCSV')?.addEventListener('click', withMoreMenuClose(() => exportMonthCSV(state.selectedMonth)));
   document.getElementById('btnExportPDF')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDF(state.selectedMonth)));
+  document.getElementById('openTaxRules')?.addEventListener('click', withMoreMenuClose(() => openModal('#taxRulesModal')));
   document.getElementById('openCalendar')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCalendarView)));
   document.getElementById('openCompare')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCompareView)));
   document.getElementById('openAnalysis')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderAnalysisView)));
@@ -2105,6 +2609,22 @@ function setupMenus() {
   document.getElementById('openShortcuts')?.addEventListener('click', withMoreMenuClose(() => openModal('#shortcutsModal')));
   document.getElementById('openAbout')?.addEventListener('click', withMoreMenuClose(() => openModal('#aboutModal')));
   document.getElementById('wipeAll')?.addEventListener('click', withMoreMenuClose(() => wipeAllData()));
+
+  const displayCurrencySelect = document.getElementById('displayCurrencySelect');
+  if (displayCurrencySelect) {
+    displayCurrencySelect.value = state.settings.displayCurrency || 'EUR';
+    displayCurrencySelect.addEventListener('change', event => {
+      const value = event.target.value || 'EUR';
+      state.settings.displayCurrency = value;
+      saveSettings(state.settings);
+      renderKPIs();
+      renderCategoryChart();
+      renderHistoryDay();
+      renderBudgets();
+      renderAccountsList();
+      hideMoreMenu();
+    });
+  }
 }
 function showDashboard() {
   const dashboard = document.getElementById('dashboard');
@@ -2279,13 +2799,16 @@ function renderCalendarView(container) {
     const txs = filterByMonth(state.transactions, currentMonth);
     const expenseMap = new Map();
     const incomeMap = new Map();
+    const displayCurrency = getDisplayCurrency();
+    const accountCurrency = new Map(state.settings.accounts.map(acc => [acc.id, acc.currency || displayCurrency]));
     txs.forEach(tx => {
-      if (isTransfer(tx)) return;
-      const dayKey = tx.date;
-      if (!dayKey) return;
+      if (isTransfer(tx) || !tx.date) return;
+      if (tx.type !== 'expense' && tx.type !== 'income') return;
+      const currency = accountCurrency.get(tx.accountId) || displayCurrency;
+      const converted = convertCents(tx.amountCents || 0, currency, displayCurrency);
       const target = tx.type === 'expense' ? expenseMap : incomeMap;
-      const prev = target.get(dayKey) || 0;
-      target.set(dayKey, prev + (tx.amountCents || 0));
+      const prev = target.get(tx.date) || 0;
+      target.set(tx.date, prev + converted);
     });
     const maxExpense = Math.max(0, ...Array.from(expenseMap.values()));
     grid.innerHTML = '';
@@ -2332,11 +2855,11 @@ function renderCalendarView(container) {
       const sumEl = document.createElement('div');
       sumEl.className = 'sum';
       if (expenseCents > 0 && incomeCents > 0) {
-        sumEl.textContent = `${formatCurrencyHR(incomeCents)} / -${formatCurrencyHR(expenseCents)}`;
+        sumEl.textContent = `${formatCurrency(incomeCents)} / ${formatCurrency(-expenseCents)}`;
       } else if (expenseCents > 0) {
-        sumEl.textContent = `-${formatCurrencyHR(expenseCents)}`;
+        sumEl.textContent = formatCurrency(-expenseCents);
       } else if (incomeCents > 0) {
-        sumEl.textContent = `${formatCurrencyHR(incomeCents)}`;
+        sumEl.textContent = `${formatCurrency(incomeCents)}`;
       } else {
         sumEl.textContent = '';
       }
@@ -2395,10 +2918,18 @@ function renderCompareView(container) {
 
   const monthStats = month => {
     const txs = filterByMonth(state.transactions, month);
-    const incomes = sumByType(txs, 'income') / 100;
-    const expenses = sumByType(txs, 'expense') / 100;
-    const balance = incomes - expenses;
-    return { incomes, expenses, balance };
+    const incomesCents = sumByType(txs, 'income');
+    const expensesCents = sumByType(txs, 'expense');
+    const balanceCents = incomesCents - expensesCents;
+    const growthCents = sumByType(txs, 'growth');
+    const taxes = estimateTaxesForMonth(month);
+    return {
+      incomes: incomesCents / 100,
+      expenses: expensesCents / 100,
+      balance: balanceCents / 100,
+      growthCents,
+      taxes
+    };
   };
 
   const updateChart = () => {
@@ -2440,7 +2971,7 @@ function renderCompareView(container) {
             callbacks: {
               label(context) {
                 const currentValue = Number(context.parsed.y || 0);
-                const baseLine = `${context.dataset.label} — ${context.label}: ${formatCurrencyHR(Math.round(currentValue * 100))}`;
+                const baseLine = `${context.dataset.label} — ${context.label}: ${formatCurrency(Math.round(currentValue * 100))}`;
                 const datasetValues = context.dataset.data || [];
                 const otherIndex = context.dataIndex === 0 ? 1 : 0;
                 if (datasetValues.length < 2 || typeof datasetValues[otherIndex] !== 'number') {
@@ -2453,7 +2984,7 @@ function renderCompareView(container) {
                   return `${baseLine}\nΔ Bez promjene u odnosu na ${otherLabel}`;
                 }
                 const sign = diff > 0 ? '+' : '−';
-                const diffCurrency = formatCurrencyHR(Math.round(Math.abs(diff) * 100));
+                const diffCurrency = formatCurrency(Math.round(Math.abs(diff) * 100));
                 const pctRaw = comparisonValue === 0 ? null : (diff / comparisonValue) * 100;
                 const pctText = pctRaw === null ? 'n/a' : `${pctRaw > 0 ? '+' : '−'}${Math.abs(pctRaw).toFixed(1)}%`;
                 return `${baseLine}\nΔ ${sign}${diffCurrency} (${pctText}) u odnosu na ${otherLabel}`;
@@ -2467,8 +2998,21 @@ function renderCompareView(container) {
         }
       }
     });
-    const balanceChange = from.balance === 0 ? (to.balance !== 0 ? 100 : 0) : ((to.balance - from.balance) / Math.abs(from.balance)) * 100;
-    statsEl.textContent = `Saldo Od: ${from.balance.toFixed(2)} € · Saldo Do: ${to.balance.toFixed(2)} € · Promjena: ${balanceChange.toFixed(1)}%`;
+    const balanceChange = from.balance === 0
+      ? (to.balance !== 0 ? 100 : 0)
+      : ((to.balance - from.balance) / Math.abs(from.balance)) * 100;
+    const parts = [
+      `Saldo Od: ${formatCurrency(Math.round(from.balance * 100))}`,
+      `Saldo Do: ${formatCurrency(Math.round(to.balance * 100))}`,
+      `Promjena: ${balanceChange.toFixed(1)}%`
+    ];
+    if (from.growthCents || to.growthCents) {
+      parts.push(`Prirast Od: ${formatCurrency(from.growthCents)} · Prirast Do: ${formatCurrency(to.growthCents)}`);
+    }
+    if ((from.taxes?.totalTax ?? 0) || (to.taxes?.totalTax ?? 0)) {
+      parts.push(`Porez Od: ${formatCurrency(from.taxes.totalTax || 0)} · Porez Do: ${formatCurrency(to.taxes.totalTax || 0)}`);
+    }
+    statsEl.textContent = parts.join(' · ');
   };
 
   fromInput.addEventListener('change', updateChart);
@@ -2488,50 +3032,73 @@ function renderAnalysisView(container) {
           <option value="expense">Troškovi</option>
           <option value="income">Prihodi</option>
         </select>
+        <label class="checkbox" for="anIncludeGrowth">
+          <input type="checkbox" id="anIncludeGrowth">
+          Uključi prirast
+        </label>
         <button id="anBackHome" type="button" class="btn btn-secondary">Početna</button>
       </div>
     </div>
     <table id="anTable" class="table">
-      <thead><tr><th data-sort="category">Kategorija</th><th data-sort="count">Broj</th><th data-sort="avg">Prosjek (€)</th><th data-sort="total">Ukupno (€)</th></tr></thead>
+      <thead><tr><th data-sort="category">Kategorija</th><th data-sort="count">Broj</th><th data-sort="avg">Prosjek</th><th data-sort="total">Ukupno</th></tr></thead>
       <tbody></tbody>
     </table>
   `;
   const monthInput = container.querySelector('#anMonth');
   const typeSelect = container.querySelector('#anType');
+  const includeGrowthInput = container.querySelector('#anIncludeGrowth');
   const backBtn = container.querySelector('#anBackHome');
   const label = container.querySelector('#anMonthLabel');
   const tbody = container.querySelector('#anTable tbody');
   let sortKey = 'total';
   let sortDir = 'desc';
 
-  const buildData = (month, type) => {
+  const buildData = (month, type, includeGrowth) => {
     const txs = filterByMonth(state.transactions, month);
     const rows = new Map();
+    const displayCurrency = getDisplayCurrency();
+    const accountsMap = new Map(state.settings.accounts.map(acc => [acc.id, acc.currency || displayCurrency]));
+
+    const pushValue = (category, cents) => {
+      if (!category) return;
+      const key = normalizeCategory(category);
+      if (!key) return;
+      const current = rows.get(key) || { category: key, count: 0, totalCents: 0 };
+      current.count += 1;
+      current.totalCents += cents;
+      rows.set(key, current);
+    };
+
     txs.forEach(tx => {
-      if (isTransfer(tx) || tx.type !== type) return;
-      const entries = splitEntries(tx);
-      entries.forEach(entry => {
-        if (!entry.category) return;
-        const key = entry.category;
-        const current = rows.get(key) || { category: key, count: 0, total: 0 };
-        current.count += 1;
-        current.total += entry.amountCents || 0;
-        rows.set(key, current);
-      });
+      if (isTransfer(tx)) return;
+      if (tx.type === type) {
+        const currency = accountsMap.get(tx.accountId) || displayCurrency;
+        splitEntries(tx).forEach(entry => {
+          if (!entry.category) return;
+          const converted = convertCents(entry.amountCents || 0, currency, displayCurrency);
+          pushValue(entry.category, converted);
+        });
+        return;
+      }
+      if (includeGrowth && tx.type === 'growth') {
+        const category = normalizeCategory(tx.category) || 'Prirast';
+        pushValue(category, signedAmountInDisplayCurrency(tx));
+      }
     });
     return Array.from(rows.values()).map(item => ({
       category: item.category,
       count: item.count,
-      total: (item.total / 100),
-      avg: item.count > 0 ? (item.total / item.count) / 100 : 0
+      totalCents: item.totalCents,
+      avgCents: item.count > 0 ? item.totalCents / item.count : 0
     }));
   };
 
   const renderTable = () => {
     const month = monthInput.value || activeMonth;
     const type = typeSelect.value;
+    const includeGrowth = includeGrowthInput?.checked;
     label.textContent = new Date(`${month}-01T00:00`).toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
-    let data = buildData(month, type);
+    let data = buildData(month, type, includeGrowth);
     data.sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1;
       switch (sortKey) {
@@ -2540,10 +3107,10 @@ function renderAnalysisView(container) {
         case 'count':
           return (a.count - b.count) * dir;
         case 'avg':
-          return (a.avg - b.avg) * dir;
+          return (a.avgCents - b.avgCents) * dir;
         case 'total':
         default:
-          return (a.total - b.total) * dir;
+          return (a.totalCents - b.totalCents) * dir;
       }
     });
     tbody.innerHTML = '';
@@ -2562,8 +3129,8 @@ function renderAnalysisView(container) {
       row.innerHTML = `
         <td>${item.category}</td>
         <td>${item.count}</td>
-        <td class="align-right">${item.avg.toFixed(2)}</td>
-        <td class="align-right">${item.total.toFixed(2)}</td>
+        <td class="align-right">${formatCurrency(Math.round(item.avgCents))}</td>
+        <td class="align-right">${formatCurrency(Math.round(item.totalCents))}</td>
       `;
       tbody.appendChild(row);
     });
@@ -2583,6 +3150,7 @@ function renderAnalysisView(container) {
   });
   monthInput.addEventListener('change', renderTable);
   typeSelect.addEventListener('change', renderTable);
+  includeGrowthInput?.addEventListener('change', renderTable);
   backBtn.addEventListener('click', () => showDashboard());
   renderTable();
 }
@@ -2635,10 +3203,21 @@ function renderLogView(container) {
 }
 
 function bindUI() {
+  const typeSelect = document.getElementById('txType');
+  if (typeSelect) {
+    updateCreateFormForType(typeSelect.value);
+    typeSelect.addEventListener('change', event => updateCreateFormForType(event.target.value));
+  }
+  const editTypeSelect = document.getElementById('editTxType');
+  if (editTypeSelect) {
+    editTypeSelect.addEventListener('change', event => updateEditFormForType(event.target.value));
+  }
   document.getElementById('txForm').addEventListener('submit', handleTxFormSubmit);
   document.getElementById('txReset').addEventListener('click', () => {
     document.getElementById('splitRows').innerHTML = '';
     document.getElementById('splitEditor').hidden = true;
+    const select = document.getElementById('txType');
+    if (select) updateCreateFormForType(select.value);
   });
   document.getElementById('btnSplit').addEventListener('click', () => {
     const editor = document.getElementById('splitEditor');
@@ -2667,6 +3246,7 @@ function bindUI() {
   document.getElementById('chartModeExpenses').addEventListener('click', () => switchChartMode('expense'));
   document.getElementById('chartModeIncomes').addEventListener('click', () => switchChartMode('income'));
   document.getElementById('chartModeTrend').addEventListener('click', () => switchChartMode('trend'));
+  document.getElementById('chartModeBalance').addEventListener('click', () => switchChartMode('balance'));
 
   document.getElementById('filtersForm').addEventListener('submit', handleFiltersSubmit);
   document.getElementById('clearFilters').addEventListener('click', clearFilters);
@@ -2685,6 +3265,7 @@ function bindUI() {
   document.getElementById('goalForm').addEventListener('submit', handleGoalSubmit);
   document.getElementById('accountForm').addEventListener('submit', handleAccountSubmit);
   document.getElementById('transferForm').addEventListener('submit', handleTransferSubmit);
+  document.getElementById('taxRuleForm')?.addEventListener('submit', handleTaxRuleSubmit);
 }
 
 function switchChartMode(mode) {
@@ -2693,6 +3274,7 @@ function switchChartMode(mode) {
   if (mode === 'expense') document.getElementById('chartModeExpenses').classList.add('active');
   if (mode === 'income') document.getElementById('chartModeIncomes').classList.add('active');
   if (mode === 'trend') document.getElementById('chartModeTrend').classList.add('active');
+  if (mode === 'balance') document.getElementById('chartModeBalance').classList.add('active');
   renderCategoryChart();
 }
 
@@ -2772,6 +3354,7 @@ async function initApp() {
   renderRecurringList();
   renderGoals();
   renderAccountsList();
+  renderTaxRules();
 
   syncHistoryDateForMonth();
   renderKPIs();

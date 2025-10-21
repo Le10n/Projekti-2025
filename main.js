@@ -1850,14 +1850,15 @@ function hideMoreMenu() {
 }
 
 // --- STABILNI KONTROLER MENIJA ---
-(function setupMenuController() {
-  if (window.__menusBound__) return;
-  window.__menusBound__ = true;
-
+document.addEventListener('DOMContentLoaded', () => {
   const pairs = [
     { btn: document.getElementById('accountMenuBtn'), menu: document.getElementById('accountMenu') },
     { btn: document.getElementById('moreMenuBtn'), menu: document.getElementById('moreMenu') }
   ];
+
+  if (pairs.some(({ btn, menu }) => !btn || !menu)) {
+    return;
+  }
 
   const closeAll = () => {
     pairs.forEach(({ btn, menu }) => {
@@ -1866,32 +1867,21 @@ function hideMoreMenu() {
     });
   };
 
-  const isInsideAnyMenu = target =>
-    pairs.some(({ btn, menu }) => (menu && menu.contains(target)) || (btn && btn.contains(target)));
-
   pairs.forEach(({ btn, menu }) => {
-    if (!btn || !menu) return;
-    menu.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-    btn.addEventListener(
-      'click',
-      event => {
-        event.stopPropagation();
-        const willOpen = menu.hidden;
-        closeAll();
-        if (willOpen) {
-          menu.hidden = false;
-          btn.setAttribute('aria-expanded', 'true');
-        }
-      },
-      { capture: false }
-    );
+    btn.addEventListener('click', event => {
+      event.stopPropagation();
+      const wasHidden = menu.hidden;
+      closeAll();
+      menu.hidden = !wasHidden;
+      btn.setAttribute('aria-expanded', String(!menu.hidden));
+    });
   });
 
   document.addEventListener(
     'click',
     event => {
-      if (!isInsideAnyMenu(event.target)) closeAll();
+      const clickedInside = pairs.some(({ btn, menu }) => menu.contains(event.target) || btn.contains(event.target));
+      if (!clickedInside) closeAll();
     },
     true
   );
@@ -1901,7 +1891,7 @@ function hideMoreMenu() {
   });
   window.addEventListener('scroll', closeAll, { passive: true });
   window.addEventListener('resize', closeAll);
-})();
+});
 
 function setupMenus() {
   if (window.__menuActionsBound__) return;

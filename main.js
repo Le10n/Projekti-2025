@@ -2537,7 +2537,7 @@ function renderCalendarView(container) {
       const target = tx.type === 'expense' ? expenseMap : incomeMap;
       target.set(dayKey, (target.get(dayKey) || 0) + (tx.amountCents || 0));
     });
-    const maxExpense = Math.max(0, ...expenseMap.values());
+    const maxExpense = Math.max(0, ...Array.from(expenseMap.values()));
     grid.innerHTML = '';
     const baseDate = new Date(`${currentMonth}-01T00:00`);
     const startWeekday = (baseDate.getDay() + 6) % 7;
@@ -2942,16 +2942,30 @@ function switchChartMode(mode) {
 
 function navigateHistory(delta) {
   if (!state.historyDate) return;
-  const date = new Date(state.historyDate + 'T00:00');
+  const date = new Date(`${state.historyDate}T00:00`);
   date.setDate(date.getDate() + delta);
-  const monthStart = new Date(state.selectedMonth + '-01T00:00');
-  const monthEnd = new Date(state.selectedMonth + '-01T00:00');
+
+  const monthStart = new Date(`${state.selectedMonth}-01T00:00`);
+  const monthEnd = new Date(`${state.selectedMonth}-01T00:00`);
   monthEnd.setMonth(monthEnd.getMonth() + 1);
   monthEnd.setDate(0);
-  if (date < monthStart || date > monthEnd) return;
+
+  if (date < monthStart) {
+    monthStart.setMonth(monthStart.getMonth() - 1);
+    setSelectedMonth(monthStart.toISOString().slice(0, 7));
+  } else if (date > monthEnd) {
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+    setSelectedMonth(monthEnd.toISOString().slice(0, 7));
+  }
+
   const next = date.toISOString().slice(0, 10);
   setHistoryDate(next);
+  renderKPIs();
+  renderCategoryChart();
+  renderBudgets();
   renderHistoryDay();
+  warnIfBudgetHit(state.selectedMonth);
+  maybePromptRecurring(state.selectedMonth);
 }
 
 function syncHistoryDateForMonth() {

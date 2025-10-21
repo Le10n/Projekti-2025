@@ -43,6 +43,19 @@ const DEFAULT_SETTINGS = {
   recurringApplied: {}
 };
 
+function normalizeBudgetConfig(config) {
+  if (typeof config === 'number') {
+    const value = Number(config);
+    return { limitCents: Number.isFinite(value) ? Math.round(value) : 0, active: true };
+  }
+  if (config && typeof config === 'object') {
+    const raw = Number(config.limitCents);
+    const limit = Number.isFinite(raw) ? Math.round(raw) : 0;
+    return { limitCents: limit, active: config.active !== false };
+  }
+  return { limitCents: 0, active: false };
+}
+
 const state = {
   transactions: [],
   settings: structuredClone(DEFAULT_SETTINGS),
@@ -160,11 +173,34 @@ function loadSettings() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.settings);
     const parsed = raw ? JSON.parse(raw) : {};
-    return {
+    const settings = {
       ...structuredClone(DEFAULT_SETTINGS),
       ...parsed,
       filters: { ...structuredClone(DEFAULT_FILTERS), ...(parsed?.filters || {}) }
     };
+    let migrated = false;
+    if (settings.budgets && typeof settings.budgets === 'object' && !Array.isArray(settings.budgets)) {
+      const normalizedBudgets = {};
+      for (const [category, cfg] of Object.entries(settings.budgets)) {
+        const normalized = normalizeBudgetConfig(cfg);
+        normalizedBudgets[category] = normalized;
+        if (
+          typeof cfg !== 'object' ||
+          cfg === null ||
+          cfg.limitCents !== normalized.limitCents ||
+          (cfg.active ?? true) !== normalized.active
+        ) {
+          migrated = true;
+        }
+      }
+      settings.budgets = normalizedBudgets;
+    } else {
+      settings.budgets = {};
+    }
+    if (migrated) {
+      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+    }
+    return settings;
   } catch (err) {
     console.error('Greška pri čitanju postavki', err);
     return structuredClone(DEFAULT_SETTINGS);
@@ -654,7 +690,19 @@ function renderHistoryDay() {
   dayTxs.forEach(tx => {
     const row = document.createElement('tr');
     const typeCell = document.createElement('td');
-    typeCell.textContent = tx.type === 'income' ? 'Prihod' : tx.type === 'expense' ? 'Trošak' : 'Transfer';
+    let pillClass = 'pill neutral';
+    let pillText = 'Transfer';
+    let pillIcon = '↔';
+    if (tx.type === 'income') {
+      pillClass = 'pill income';
+      pillText = 'Prihod';
+      pillIcon = '▲';
+    } else if (tx.type === 'expense') {
+      pillClass = 'pill expense';
+      pillText = 'Trošak';
+      pillIcon = '▼';
+    }
+    typeCell.innerHTML = `<span class="${pillClass}" title="${pillText}">${pillIcon} ${pillText}</span>`;
     row.appendChild(typeCell);
 
     const titleCell = document.createElement('td');
@@ -998,6 +1046,11 @@ function closeDrawer(selector) {
 function renderBudgets() {
   const container = document.getElementById('budgetsList');
   if (!container) return;
+  if (!container.dataset.bound) {
+    container.addEventListener('click', onBudgetListClick);
+    container.addEventListener('change', onBudgetListChange);
+    container.dataset.bound = 'true';
+  }
   container.innerHTML = '';
   const monthTxs = getMonthlyTransactions(false);
   const usage = calcBudgetUsage(monthTxs);
@@ -1010,14 +1063,32 @@ function renderBudgets() {
   }
   usage.forEach(item => {
     const div = document.createElement('div');
-    div.className = 'budget-item';
+    div.className = 'budget-item budget-row';
+    if (!item.active) div.classList.add('inactive');
     const pct = item.limitCents > 0 ? Math.min(100, Math.round((item.spentCents / item.limitCents) * 100)) : 0;
+    const limitLabel = item.limitCents > 0
+      ? `Potrošeno: ${formatCurrencyHR(item.spentCents)} / ${formatCurrencyHR(item.limitCents)}`
+      : `Potrošeno: ${formatCurrencyHR(item.spentCents)} (bez limita)`;
     div.innerHTML = `
-      <strong>${item.category}</strong>
-      <span>${formatCurrencyHR(item.spentCents)} / ${formatCurrencyHR(item.limitCents)}</span>
-      <div class="progress-bar"><span style="width:${pct}%"></span></div>
+      <div class="budget-row-header">
+        <div class="budget-row-info">
+          <span class="cat">${item.category}</span>
+          <span class="limit">${limitLabel}</span>
+        </div>
+        <div class="budget-row-actions">
+          <label class="budget-toggle">
+            <input type="checkbox" data-action="toggle" data-cat="${item.category}" ${item.active ? 'checked' : ''}>
+            Aktivno
+          </label>
+          <button type="button" class="btn btn-secondary" data-action="delete" data-cat="${item.category}">Izbriši</button>
+        </div>
+      </div>
+      <div class="budget-row-progress">
+        <div class="progress-bar"><span style="width:${pct}%"></span></div>
+        <div class="summary">${item.limitCents > 0 ? `${pct}% budžeta` : 'Bez limita'}</div>
+      </div>
     `;
-    if (item.limitCents > 0) {
+    if (item.active && item.limitCents > 0) {
       if (item.spentCents >= item.limitCents) {
         const badge = document.createElement('span');
         badge.className = 'badge danger';
@@ -1034,6 +1105,32 @@ function renderBudgets() {
   });
 }
 
+function onBudgetListClick(event) {
+  const button = event.target.closest('button[data-action="delete"]');
+  if (!button) return;
+  const category = button.dataset.cat;
+  if (!category) return;
+  if (!confirm(`Izbrisati budžet za “${category}”?`)) return;
+  delete state.settings.budgets[category];
+  saveSettings(state.settings);
+  state.budgetWarnings.clear();
+  renderBudgets();
+  warnIfBudgetHit();
+}
+
+function onBudgetListChange(event) {
+  const toggle = event.target.matches('input[data-action="toggle"]') ? event.target : null;
+  if (!toggle) return;
+  const category = toggle.dataset.cat;
+  if (!category) return;
+  const current = normalizeBudgetConfig(state.settings.budgets[category]);
+  state.settings.budgets[category] = { limitCents: current.limitCents, active: toggle.checked };
+  saveSettings(state.settings);
+  state.budgetWarnings.clear();
+  renderBudgets();
+  warnIfBudgetHit();
+}
+
 function calcBudgetUsage(monthTxs) {
   const budgets = state.settings.budgets || {};
   const entries = Object.entries(budgets);
@@ -1042,19 +1139,24 @@ function calcBudgetUsage(monthTxs) {
   monthTxs.forEach(tx => {
     if (isTransfer(tx) || tx.type !== 'expense') return;
     splitEntries(tx).forEach(entry => {
-      const prev = map.get(entry.category) || 0;
-      map.set(entry.category, prev + entry.amountCents);
+      const key = normalizeCategory(entry.category);
+      map.set(key, (map.get(key) || 0) + entry.amountCents);
     });
   });
-  return entries.map(([category, limitCents]) => ({
-    category,
-    limitCents,
-    spentCents: map.get(normalizeCategory(category)) || 0
-  }));
+  return entries.map(([category, cfg]) => {
+    const normalized = normalizeBudgetConfig(cfg);
+    const key = normalizeCategory(category);
+    return {
+      category,
+      limitCents: normalized.limitCents,
+      active: normalized.active,
+      spentCents: map.get(key) || 0
+    };
+  });
 }
 
 function warnIfBudgetHit(month = state.selectedMonth) {
-  const usage = calcBudgetUsage(getMonthlyTransactions(false));
+  const usage = calcBudgetUsage(getMonthlyTransactions(false)).filter(item => item.active);
   usage.forEach(item => {
     if (!item.limitCents) return;
     const pct = (item.spentCents / item.limitCents) * 100;
@@ -1430,10 +1532,12 @@ function handleBudgetSubmit(event) {
     showToast('Unesite kategoriju i limit.', 'danger');
     return;
   }
-  state.settings.budgets[category] = amountCents;
+  state.settings.budgets[category] = { limitCents: amountCents, active: true };
   saveSettings(state.settings);
   event.target.reset();
   renderBudgets();
+  state.budgetWarnings.clear();
+  warnIfBudgetHit();
 }
 
 function handleFiltersSubmit(event) {
@@ -1930,7 +2034,6 @@ function setupMenus() {
   document.getElementById('openCalendar')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCalendarView)));
   document.getElementById('openCompare')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCompareView)));
   document.getElementById('openAnalysis')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderAnalysisView)));
-  document.getElementById('openLog')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderLogView)));
   document.getElementById('backupToggle')?.addEventListener('change', event => {
     state.settings.weeklyBackup = event.target.checked;
     saveSettings(state.settings);
@@ -2055,7 +2158,11 @@ function renderCalendarView(container) {
         const overlay = document.createElement('div');
         overlay.className = 'heat';
         if (expenseCents > 0 && incomeCents > 0) {
-          overlay.style.background = `linear-gradient(135deg, rgba(239,68,68,${Math.max(intensity, 0.2)}) 0%, rgba(239,68,68,${Math.max(intensity, 0.2)}) 50%, rgba(22,163,74,0.35) 50%, rgba(22,163,74,0.45) 100%)`;
+          overlay.style.background = `linear-gradient(135deg,
+            rgba(239,68,68,${Math.max(intensity, 0.2)}) 0%,
+            rgba(239,68,68,${Math.max(intensity, 0.2)}) 50%,
+            rgba(22,163,74,0.35) 50%,
+            rgba(22,163,74,0.45) 100%)`;
         } else if (expenseCents > 0) {
           overlay.style.background = `rgba(239,68,68,${Math.max(intensity, 0.2)})`;
         } else {
@@ -2452,7 +2559,11 @@ function renderCalendarView(container) {
         const overlay = document.createElement('div');
         overlay.className = 'heat';
         if (expenseCents > 0 && incomeCents > 0) {
-          overlay.style.background = `linear-gradient(135deg, rgba(239,68,68,${Math.max(intensity, 0.25)}) 0%, rgba(239,68,68,${Math.max(intensity, 0.25)}) 50%, rgba(22,163,74,0.35) 50%, rgba(22,163,74,0.45) 100%)`;
+          overlay.style.background = `linear-gradient(135deg,
+            rgba(239,68,68,${Math.max(intensity, 0.25)}) 0%,
+            rgba(239,68,68,${Math.max(intensity, 0.25)}) 50%,
+            rgba(22,163,74,0.35) 50%,
+            rgba(22,163,74,0.45) 100%)`;
         } else if (expenseCents > 0) {
           overlay.style.background = `rgba(239,68,68,${Math.max(intensity, 0.25)})`;
         } else {

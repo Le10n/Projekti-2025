@@ -566,17 +566,30 @@ textarea {
 }
 
 .view-head .actions input[type="month"],
+.view-head .actions input[type="number"],
 .view-head .actions select,
 .view-head .actions button {
   height: 40px;
 }
 
 .view-head .actions input[type="month"],
+.view-head .actions input[type="number"],
 .view-head .actions select {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid #cbd5f5;
-  background: #fff;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.view-head .actions label {
+  color: var(--text);
+}
+
+.view-head .actions input[type="month"]::placeholder,
+.view-head .actions input[type="number"]::placeholder {
+  color: var(--text-muted);
 }
 
 .calendar-grid {
@@ -745,6 +758,33 @@ td.align-right {
   color: var(--danger);
 }
 
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.pill.income {
+  background: rgba(22, 163, 74, 0.15);
+  color: #16a34a;
+}
+
+.pill.expense {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+}
+
+.pill.neutral {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
+
 .modal,
 .drawer {
   position: fixed;
@@ -840,6 +880,71 @@ td.align-right {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.budget-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.budget-row.inactive {
+  opacity: 0.6;
+}
+
+.budget-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.budget-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.budget-row-info .cat {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.budget-row-info .limit {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.budget-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.budget-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.budget-toggle input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+.budget-row-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-row-progress .summary {
+  font-size: 0.9rem;
+  color: var(--text-muted);
 }
 
 .progress-bar {

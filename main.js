@@ -1849,16 +1849,13 @@ function hideMoreMenu() {
   hideMenuById('moreMenu', 'moreMenuBtn');
 }
 
-// --- STABILNI KONTROLER MENIJA ---
+// --- STABILNI KONTROLER MENIJA v3 ---
 document.addEventListener('DOMContentLoaded', () => {
   const pairs = [
     { btn: document.getElementById('accountMenuBtn'), menu: document.getElementById('accountMenu') },
     { btn: document.getElementById('moreMenuBtn'), menu: document.getElementById('moreMenu') }
   ];
-
-  if (pairs.some(({ btn, menu }) => !btn || !menu)) {
-    return;
-  }
+  if (pairs.some(({ btn, menu }) => !btn || !menu)) return;
 
   const closeAll = () => {
     pairs.forEach(({ btn, menu }) => {
@@ -1868,19 +1865,26 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   pairs.forEach(({ btn, menu }) => {
-    btn.addEventListener('click', event => {
+    btn.addEventListener('pointerdown', event => {
+      event.preventDefault();
       event.stopPropagation();
       const wasHidden = menu.hidden;
       closeAll();
-      menu.hidden = !wasHidden;
+      menu.hidden = wasHidden ? false : true;
       btn.setAttribute('aria-expanded', String(!menu.hidden));
     });
   });
 
   document.addEventListener(
-    'click',
+    'pointerdown',
     event => {
-      const clickedInside = pairs.some(({ btn, menu }) => menu.contains(event.target) || btn.contains(event.target));
+      const path = typeof event.composedPath === 'function' ? event.composedPath() : null;
+      const clickedInside = pairs.some(({ btn, menu }) => {
+        if (path) {
+          return path.includes(btn) || path.includes(menu);
+        }
+        return btn.contains(event.target) || menu.contains(event.target);
+      });
       if (!clickedInside) closeAll();
     },
     true

@@ -40,6 +40,10 @@
   --menu-hover: #111827;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
 }

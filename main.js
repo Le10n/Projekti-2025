@@ -1485,8 +1485,6 @@ function updateMenus() {
   if (darkToggle) darkToggle.checked = Boolean(state.settings.darkMode);
   const backupToggle = document.getElementById('backupToggle');
   if (backupToggle) backupToggle.checked = Boolean(state.settings.weeklyBackup);
-  const pdfSelect = document.getElementById('pdfDefaultStyle');
-  if (pdfSelect) pdfSelect.value = state.settings.pdfStyle || 'modern';
 }
 function maybeOfferWeeklyBackup() {
   if (!state.settings.weeklyBackup) return;
@@ -1843,13 +1841,6 @@ function hideMenuById(menuId, btnId) {
   if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
-function hideMenuById(menuId, btnId) {
-  const menu = document.getElementById(menuId);
-  const btn = document.getElementById(btnId);
-  if (menu) menu.hidden = true;
-  if (btn) btn.setAttribute('aria-expanded', 'false');
-}
-
 function hideAccountMenu() {
   hideMenuById('accountMenu', 'accountMenuBtn');
 }
@@ -1858,54 +1849,63 @@ function hideMoreMenu() {
   hideMenuById('moreMenu', 'moreMenuBtn');
 }
 
-function setupMenus() {
-  if (window.__menus_wired__) return;
-  window.__menus_wired__ = true;
+// --- STABILNI KONTROLER MENIJA ---
+(function setupMenuController() {
+  if (window.__menusBound__) return;
+  window.__menusBound__ = true;
 
-  const configs = [
-    { btnSelector: '#accountMenuBtn', menuSelector: '#accountMenu' },
-    { btnSelector: '#moreMenuBtn', menuSelector: '#moreMenu' }
+  const pairs = [
+    { btn: document.getElementById('accountMenuBtn'), menu: document.getElementById('accountMenu') },
+    { btn: document.getElementById('moreMenuBtn'), menu: document.getElementById('moreMenu') }
   ];
 
-  const entries = configs
-    .map(({ btnSelector, menuSelector }) => ({
-      btn: document.querySelector(btnSelector),
-      menu: document.querySelector(menuSelector)
-    }))
-    .filter(({ btn, menu }) => btn && menu);
-
   const closeAll = () => {
-    entries.forEach(({ btn, menu }) => {
+    pairs.forEach(({ btn, menu }) => {
       if (menu) menu.hidden = true;
       if (btn) btn.setAttribute('aria-expanded', 'false');
     });
   };
 
-  const isInMenu = target => entries.some(({ btn, menu }) => menu.contains(target) || btn === target);
+  const isInsideAnyMenu = target =>
+    pairs.some(({ btn, menu }) => (menu && menu.contains(target)) || (btn && btn.contains(target)));
 
-  entries.forEach(({ btn, menu }) => {
+  pairs.forEach(({ btn, menu }) => {
+    if (!btn || !menu) return;
     menu.hidden = true;
     btn.setAttribute('aria-expanded', 'false');
-    btn.addEventListener('click', event => {
-      event.stopPropagation();
-      const willOpen = menu.hidden;
-      closeAll();
-      if (willOpen) {
-        menu.hidden = false;
-        btn.setAttribute('aria-expanded', 'true');
-      }
-    });
+    btn.addEventListener(
+      'click',
+      event => {
+        event.stopPropagation();
+        const willOpen = menu.hidden;
+        closeAll();
+        if (willOpen) {
+          menu.hidden = false;
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      },
+      { capture: false }
+    );
   });
 
-  document.addEventListener('click', event => {
-    if (!isInMenu(event.target)) closeAll();
-  }, { capture: true });
+  document.addEventListener(
+    'click',
+    event => {
+      if (!isInsideAnyMenu(event.target)) closeAll();
+    },
+    true
+  );
 
   window.addEventListener('keydown', event => {
     if (event.key === 'Escape') closeAll();
   });
   window.addEventListener('scroll', closeAll, { passive: true });
   window.addEventListener('resize', closeAll);
+})();
+
+function setupMenus() {
+  if (window.__menuActionsBound__) return;
+  window.__menuActionsBound__ = true;
 
   document.getElementById('btnExport')?.addEventListener('click', () => {
     hideAccountMenu();
@@ -1933,8 +1933,6 @@ function setupMenus() {
   document.getElementById('openFilterDrawer')?.addEventListener('click', withMoreMenuClose(() => openDrawer('#filterDrawer')));
   document.getElementById('btnExportCSV')?.addEventListener('click', withMoreMenuClose(() => exportMonthCSV(state.selectedMonth)));
   document.getElementById('btnExportPDF')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDF(state.selectedMonth)));
-  document.getElementById('btnExportPDFModern')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDFModern(state.selectedMonth)));
-  document.getElementById('btnExportPDFClassic')?.addEventListener('click', withMoreMenuClose(() => exportMonthPDFClassic(state.selectedMonth)));
   document.getElementById('openCalendar')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCalendarView)));
   document.getElementById('openCompare')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderCompareView)));
   document.getElementById('openAnalysis')?.addEventListener('click', withMoreMenuClose(() => showFullView(renderAnalysisView)));
@@ -1976,10 +1974,6 @@ function setupMenus() {
   document.getElementById('openShortcuts')?.addEventListener('click', withMoreMenuClose(() => openModal('#shortcutsModal')));
   document.getElementById('openAbout')?.addEventListener('click', withMoreMenuClose(() => openModal('#aboutModal')));
   document.getElementById('wipeAll')?.addEventListener('click', withMoreMenuClose(() => wipeAllData()));
-  document.getElementById('pdfDefaultStyle')?.addEventListener('change', event => {
-    state.settings.pdfStyle = event.target.value;
-    saveSettings(state.settings);
-  });
 }
 function showDashboard() {
   const dashboard = document.getElementById('dashboard');
